@@ -45,22 +45,24 @@ public class BitArray64{
             this.bits=bits;return;
         }
         int segments_required=(int)((bits+63L)/64L);
+        int ptr=(int)(this.bits/64L);
+        int r=(int)(this.bits-64L*(long)ptr);
         if(segments_required<=segments.length){
             long f=identity;
-            int ptr_segment=(int)(this.bits/64L);
-            for(int r=(int)(this.bits-64L*(long)ptr_segment);r>0;)f|=bases[--r];
-            segments[ptr_segment]&=f;
-            while(++ptr_segment<segments_required)segments[ptr_segment]=0L;
+            while(r!=0)f|=bases[--r];
+            segments[ptr]&=f;
+            while(++ptr!=segments_required)segments[ptr]=0L;
             this.bits=bits;return;
         }
         long[]segments_new=new long[segments_required];
-        long f=identity;
-        int ptr_segment=(int)(this.bits/64L);
-        for(int r=(int)(this.bits-64L*(long)ptr_segment);r>0;)f|=bases[--r];
-        segments_new[ptr_segment]=segments[ptr_segment]&f;
-        while(ptr_segment>0){
-            --ptr_segment;
-            segments_new[ptr_segment]=segments[ptr_segment];
+        if(r!=0){
+            long f=identity;
+            do f|=bases[--r];while(r!=0);
+            segments_new[ptr]=segments[ptr]&f;
+        }
+        while(ptr>0){
+            --ptr;
+            segments_new[ptr]=segments[ptr];
         }
         this.bits=bits;segments=segments_new;
     }
