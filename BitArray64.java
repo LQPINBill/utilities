@@ -31,7 +31,7 @@ public class BitArray64{
         segments[s]=(segments[s]&~f)|(bit?f:0L);
     }
 
-    final private static long identity=bases[0]&bases[1];
+    final private static long identity_add=bases[0]&bases[1];
     /*final private static long[]covers=new long[64];
     static{
         long cover=0L;
@@ -48,7 +48,7 @@ public class BitArray64{
         int ptr=(int)(this.bits/64L);
         int r=(int)(this.bits-64L*(long)ptr);
         if(segments_required<=segments.length){
-            long f=identity;
+            long f=identity_add;
             while(r!=0)f|=bases[--r];
             segments[ptr]&=f;
             while(++ptr!=segments_required)segments[ptr]=0L;
@@ -56,22 +56,21 @@ public class BitArray64{
         }
         long[]segments_new=new long[segments_required];
         if(r!=0){
-            long f=identity;
+            long f=identity_add;
             do f|=bases[--r];while(r!=0);
             segments_new[ptr]=segments[ptr]&f;
         }
-        while(ptr>0){
+        while(ptr!=0){
             --ptr;
             segments_new[ptr]=segments[ptr];
         }
         this.bits=bits;segments=segments_new;
     }
-
     public void trimToBits(){
         int q=(int)((bits+63L)/64L);
         if(q!=segments.length){
             long[]segments_new=new long[q];
-            while(q>0){
+            while(q!=0){
                 --q;
                 segments_new[q]=segments[q];
             }
