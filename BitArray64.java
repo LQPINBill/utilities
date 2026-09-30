@@ -14,10 +14,8 @@ public class BitArray64{
     final private static long[]bases=new long[64];
     static{
         long basis=1L;
-        for(int k=0;k<64;++k){
-            bases[k]=basis;
-            basis=basis<<1;
-        }
+        int k=0;
+        do basis=(bases[k]=basis)<<1;while(++k<64);
     }
     public boolean get(long index){
         if(index<0L|bits<=index)throw new IndexOutOfBoundsException();
@@ -34,10 +32,10 @@ public class BitArray64{
     final private static long identity_add=bases[0]&bases[1];
     /*final private static long[]covers=new long[64];
     static{
-        long cover=0L;
-        for(int k=0;k<64;++k){
-            covers[k]=cover|=bases[k];
-        }
+        long c=identity_add;
+        int r=63;
+        do{ c
+        }while(--r>=0);
     }*/
     public void realloc(long bits){
         if(bits<0L|MAX_BITS<bits)throw new IllegalArgumentException();
@@ -48,17 +46,17 @@ public class BitArray64{
         int ptr=(int)(this.bits/64L);
         int r=(int)(this.bits-64L*(long)ptr);
         if(segments_required<=segments.length){
-            long f=identity_add;
-            while(r!=0)f|=bases[--r];
-            segments[ptr]&=f;
+            long c=identity_add;
+            while(r!=0)c|=bases[--r];
+            segments[ptr]&=c;
             while(++ptr!=segments_required)segments[ptr]=0L;
             this.bits=bits;return;
         }
         long[]segments_new=new long[segments_required];
         if(r!=0){
-            long f=identity_add;
-            do f|=bases[--r];while(r!=0);
-            segments_new[ptr]=segments[ptr]&f;
+            long c=identity_add;
+            do c|=bases[--r];while(r!=0);
+            segments_new[ptr]=segments[ptr]&c;
         }
         while(ptr!=0){
             --ptr;
