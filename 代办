@@ -1,0 +1,1 @@
+MATHEMATICALS.h void replc 两个参数指向同一地址时是未定义行为
