@@ -1,15 +1,24 @@
 
 
-
-
 final public class Cache{
-//==============================================================================
 
     public  static Boolean Boolean_valueOf(boolean value){
-        return value    ?Boolean.TRUE:Boolean.FALSE;
+        return value?Boolean.TRUE:Boolean.FALSE;
+    }
+    public  static Boolean Boolean_valueOf(byte    value){
+        return Boolean_valueOf(value!=(byte) 0 );
+    }
+    public  static Boolean Boolean_valueOf(short   value){
+        return Boolean_valueOf(value!=(short)0 );
+    }
+    public  static Boolean Boolean_valueOf(int     value){
+        return Boolean_valueOf(value!=       0 );
     }
     public  static Boolean Boolean_valueOf(long    value){
-        return value!=0L?Boolean.TRUE:Boolean.FALSE;
+        return Boolean_valueOf(value!=       0L);
+    }
+    public  static Boolean Boolean_valueOf(Object  value){
+        return Boolean_valueOf(value!=     null);
     }
 
 //==============================================================================
@@ -19,7 +28,7 @@ final public class Cache{
         private Integer value;
         private IntegerNode(){}
     }
-    private static IntegerNode Integer_root=new IntegerNode();
+    private static IntegerNode Integer_root;
     public  static void    Integer_malloc (){
         Integer_root=new IntegerNode();
     }
@@ -36,14 +45,13 @@ final public class Cache{
         Integer_root=null;
     }
     public  static Integer Integer_valueOf(int value){
-        if(-128<=value||value<=127)return Integer.valueOf(value);
         IntegerNode ptr=Integer_root;
         byte k=0;
         do ptr=(value&(1<<k))==0?
             ptr.left ==null?ptr.left =new IntegerNode():ptr.left :
             ptr.right==null?ptr.right=new IntegerNode():ptr.right;
         while(++k<32);
-        return ptr.value==null?ptr.value=new Integer(value):ptr.value;
+        return ptr.value==null?ptr.value=Integer.valueOf(value):ptr.value;
     }
 
 //==============================================================================
@@ -53,7 +61,7 @@ final public class Cache{
         private Long value;
         private LongNode(){}
     }
-    private static LongNode Long_root=new LongNode();
+    private static LongNode Long_root;
     public  static void Long_malloc (){
         Long_root=new LongNode();
     }
@@ -70,7 +78,7 @@ final public class Cache{
         Long_root=null;
     }
     public  static Long Long_valueOf(long value){
-        if(-128<=value||value<=127)return Long.valueOf(value);
+        if(-128L<=value||value<=127L)return Long.valueOf(value);
         LongNode ptr=Long_root;
         byte k=0;
         do ptr=(value&(1<<k))==0?
@@ -82,36 +90,8 @@ final public class Cache{
 
 //==============================================================================
 
-    final private static class ByteNode{
-        private ByteNode left,right;
-        private Byte value;
-        private ByteNode(){}
-    }
-    private static ByteNode Byte_root=new ByteNode();
-    public  static void Byte_malloc (){
-        Byte_root=new ByteNode();
-    }
-    private static void Byte_free   (ByteNode node){
-        if(node==null)return;
-        node.value=null;
-        Byte_free(node.left );
-        node.left =null;
-        Byte_free(node.right);
-        node.right=null;
-    }
-    public  static void Byte_free   (){
-        Byte_free(Byte_root);
-        Byte_root=null;
-    }
     public  static Byte Byte_valueOf(byte value){
-        if(-128<=value||value<=127)return Byte.valueOf(value);
-        ByteNode ptr=Byte_root;
-        byte k=0;
-        do ptr=(value&(1<<k))==0?
-            ptr.left ==null?ptr.left =new ByteNode():ptr.left :
-            ptr.right==null?ptr.right=new ByteNode():ptr.right;
-        while(++k<8);
-        return ptr.value==null?ptr.value=new Byte(value):ptr.value;
+        return Byte.valueOf(value);
     }
 
 //==============================================================================
@@ -121,7 +101,7 @@ final public class Cache{
         private Short value;
         private ShortNode(){}
     }
-    private static ShortNode Short_root=new ShortNode();
+    private static ShortNode Short_root;
     public  static void  Short_malloc (){
         Short_root=new ShortNode();
     }
@@ -138,7 +118,7 @@ final public class Cache{
         Short_root=null;
     }
     public  static Short Short_valueOf(short value){
-        if(-128<=value||value<=127)return Short.valueOf(value);
+        if((short)-128<=value||value<=(short)127)return Short.valueOf(value);
         ShortNode ptr=Short_root;
         byte k=0;
         do ptr=(value&(1<<k))==0?
@@ -154,17 +134,20 @@ final public class Cache{
 
 
 
+
+
+
 //==============================================================================
+
     public  static void malloc(){
-        Byte_malloc   ();
         Short_malloc  ();
         Integer_malloc();
         Long_malloc   ();
     }
     public  static void free  (){
-        Byte_free   ();
         Short_free  ();
         Integer_free();
         Long_free   ();
     }
+    private Cache(){}
 }
