@@ -5,40 +5,76 @@ final public class VariableCollection implements Cloneable{
     final private ConcurrentHashMap<Integer,String>map_index_name;
     final private ConcurrentHashMap<String ,String>map_name_value;
 
+    /**
+     * create a new VC with initial expected variable count (capacity) of 16
+     */
     public VariableCollection(){
         map_index_name=new ConcurrentHashMap<>();
         map_name_value=new ConcurrentHashMap<>();
     }
+    /**
+     * create a new VC with initial expected variable count (capacity) of{@code
+     * expectedVariableCount}
+     * @param expectedVariableCount expected variable count
+     */
     public VariableCollection(int expectedVariableCount){
         map_index_name=new ConcurrentHashMap<>(expectedVariableCount);
         map_name_value=new ConcurrentHashMap<>(expectedVariableCount);
     }
 
+    /**
+     * a String is a valid variable name iff it is not{@code null} and is not 
+     * the empty String{@code ""}, and contains only the following chars: 
+     * 
+     *  a to z, A to Z (letters)
+     * 
+     *  0 to 9 (digits)
+     * 
+     *  _ and $
+     * 
+     * and begins with a non digit char
+     * @param variableName variable name to check
+     * @throws NullPointerException iff{@code variableName}is{@code null}
+     * @throws IllegalArgumentException iff{@code variableName}is not a valid
+     * name
+     */
     private static void checkValidityOfVariableName(String variableName){
         //if(variableName==null)throw new NullPointerException();
         int i=variableName.length();
-        if(i==0)throw new IllegalArgumentException();
+        if(i==0)throw new IllegalArgumentException("invalid variable name, variable name can not be the empty String \"\"\nvariable name: "+variableName+'\n');
         char c=variableName.charAt(0);
         if( !(  Character.isLetter(c)
                 ||'_'==c
                 ||'$'==c
             )
-        )throw new IllegalArgumentException();
+        )throw new IllegalArgumentException("invalid variable name, variable name must begin with a letter, digit (a to z, A to Z, 0 to 9), '_' or '$'\nvariable name: "+variableName+'\n');
         while(i>1)
             if( !(  Character.isLetterOrDigit(c=variableName.charAt(--i))
                     ||'_'==c
                     ||'$'==c
                 )
-            )throw new IllegalArgumentException();
+            )throw new IllegalArgumentException("invalid variable name, variable name must contain only letters, digits (a to z, A to Z, 0 to 9), '_' or '$'\nvariable name: "+variableName+'\n');
     }
+    /**
+     * declare a new variable in this VC
+     * @param variableName variable name
+     * @throws RuntimeException iff this VC already declared a variable with 
+     * name{@code variableName}
+     */
     public void add   (String variableName){
         checkValidityOfVariableName(variableName);
-        if(map_name_value.putIfAbsent(variableName,"")!=null)throw new RuntimeException();
+        if(map_name_value.putIfAbsent(variableName,"")!=null)throw new RuntimeException("repeated declaration: this VC already declared a variable with name: "+variableName);
         map_index_name.put(Cache.Integer_valueOf(map_index_name.size()),variableName);
     }
+    /**
+     * remove a variable in this VC
+     * @param variableName variable name
+     * @throws RuntimeException iff this VC does not have a variable with name
+     * {@code variableName}
+     */
     public void remove(String variableName){
         checkValidityOfVariableName(variableName);
-        if(map_name_value.remove(variableName)==null)throw new RuntimeException();
+        if(map_name_value.remove(variableName)==null)throw new RuntimeException("this VC does not have a variable with name: "+variableName);
         int i=map_name_value.size();
         while(!map_index_name.get(Cache.Integer_valueOf(i)).equals(variableName))--i;
         for(int k=i+1,l=map_index_name.size();k<l;k=(i=k)+1)
@@ -83,13 +119,25 @@ final public class VariableCollection implements Cloneable{
     public boolean containsValue   (String         value){
         return map_name_value.containsValue(value);
     }
+    /**
+     * @return the number of variables in this VC
+     */
     public int variableCount(){
         return map_index_name.size();
     }
+    /**
+     * remove all variables in this VC
+     * 
+     * after call,{@code this.isEmpty()}is{@code true}
+     */
     public void    clear    (){
         map_index_name.clear();
         map_name_value.clear();
     }
+    /**
+     * @return{@code true}iff the variable count of this VC is 0, that is, 
+     * contains no variable
+     */
     public boolean isEmpty  (){
         return map_index_name.isEmpty();
     }
@@ -115,7 +163,7 @@ final public class VariableCollection implements Cloneable{
         }
         return true;
     }
-    public boolean equals(VariableCollection y){
+    public boolean             equals(VariableCollection y){
         if(y==null)return false;
         Integer I       =Cache.Integer_valueOf(map_name_value.size()-1);
         if(I.intValue()!=                    y.map_name_value.size()-1)return false;
@@ -131,7 +179,7 @@ final public class VariableCollection implements Cloneable{
         return true;
     }
     @Override
-    public boolean equals(Object y){
+    public boolean             equals(Object             y){
         return y instanceof VariableCollection vc?equals(vc):false;
     }
     @Override
@@ -196,36 +244,42 @@ final public class VariableCollection implements Cloneable{
 
     private static void checkValidityOfStorage(String storage){
         //if(storage==null)throw new NullPointerException();
-        char c;
-        int k=0,l=storage.length();
+        int l=storage.length(),k=0;
         while(k<l)
-            if('\n'==(c=storage.charAt(k++))||
-                '"'== c||(
-                        '\\'== c
-                    &&  '\\'!=(c=storage.charAt(k++))
-                    &&   '"'!= c
-                    &&   'n'!= c
-                )
-            )throw new IllegalArgumentException();
+            switch(storage.charAt(k++)){
+                case'\n'->throw new IllegalArgumentException();
+                case '"'->throw new IllegalArgumentException();
+                case'\\'->{
+                    if(k==l)throw new IllegalArgumentException();
+                    switch(storage.charAt(k++)){
+                        case'\\'->{}
+                        case '"'->{}
+                        case 'n'->{}
+                        default ->throw new IllegalArgumentException();
+                    }
+                }
+            }
     }
     public static String storageTOmemory (String storage){
         char[]value=new char[storage.length()];
         int i_storage=0,
             i_value  =0;
         char c;
-        while(i_storage<value.length){
-            value[i_value++]=switch(c=storage.charAt(i_storage++)){
+        while(i_storage<value.length)
+            switch(c=storage.charAt(i_storage++)){
                 case'\n'->throw new IllegalArgumentException();
                 case '"'->throw new IllegalArgumentException();
-                case'\\'->switch(storage.charAt(i_storage++)){
-                    case'\\'->'\\';
-                    case '"'-> '"';
-                    case 'n'->'\n';
-                    default ->throw new IllegalArgumentException();
-                };
-                default ->c;
-            };
-        }
+                case'\\'->{
+                    if(i_storage==value.length)throw new IllegalArgumentException();
+                    value[i_value++]=switch(storage.charAt(i_storage++)){
+                        case'\\'->'\\';
+                        case '"'-> '"';
+                        case 'n'->'\n';
+                        default ->throw new IllegalArgumentException();
+                    };
+                }
+                default ->value[i_value++]=c;
+            }
         return new String(value,0,i_value);
     }
     public static String  memoryTOstorage(String value  ){
@@ -278,7 +332,6 @@ final public class VariableCollection implements Cloneable{
     public byte[] toBytes (){
         return toString(0).getBytes(StandardCharsets.UTF_8);
     }
-
     public VariableCollection(String content){
         map_index_name=new ConcurrentHashMap<>();
         map_name_value=new ConcurrentHashMap<>();
@@ -289,70 +342,6 @@ final public class VariableCollection implements Cloneable{
         map_name_value=new ConcurrentHashMap<>();
         setto(new String(bytes,StandardCharsets.UTF_8));
     }
-    /*public void setto        (String content){
-        int content_l=content.length();
-        int i=content_l;
-        boolean all_empty=true;
-        char c;
-        while(all_empty&&i>0)all_empty=' '==(c=content.charAt(--i))
-                                    ||'\n'== c;
-        map_index_name.clear();
-        map_name_value.clear();
-        if(all_empty)return;
-        if(++i!=content_l)content=content.substring(0,content_l=i);
-        int index=i=0;
-        int begin_name;
-        String name;
-        StringBuilder value;
-        do{ while(' ' ==(c=content.charAt(i))
-                ||'\n'== c)++i;
-            if(
-                !(
-                    Character.isAlphabetic(c=content.charAt(begin_name=i))
-                    ||'_'==c||'$'==c
-                )
-            )throw new IllegalArgumentException();
-            while(' ' !=(c=content.charAt(++i))
-                &&'=' != c
-                &&'\n'!= c)
-                if(
-                    !(
-                        Character.isAlphabetic(c)
-                        ||'_'==c||'$'==c
-                        ||'0'==c||'1'==c||'2'==c||'3'==c||'4'==c
-                        ||'5'==c||'6'==c||'7'==c||'8'==c||'9'==c
-                    )
-                )throw new IllegalArgumentException();
-            map_index_name.put(Cache.Integer_valueOf(index++),name=content.substring(begin_name,i));
-            while('='!=(c=content.charAt(i))){
-                if(' '!=c&&'\n'!=c)throw new RuntimeException();
-                ++i;
-            }
-            while('"'!=(c=content.charAt(++i))){
-                if(' '!=c&&'\n'!=c)throw new RuntimeException();
-            }
-            value=new StringBuilder(64);
-            while('"'!=(c=content.charAt(++i))){
-                value.append(
-                    switch(c){
-                        case'\n'->throw new RuntimeException();
-                        case'\\'->switch(content.charAt(++i)){
-                            case'\\'->'\\';
-                            case 'n'->'\n';
-                            case '"'-> '"';
-                            default->throw new RuntimeException();
-                        };
-                        default ->c;
-                    }
-                );
-            }
-            if(map_name_value.put(name,value.toString())!=null)throw new RuntimeException();
-            value.trimToSize();
-            while(';'!=(c=content.charAt(++i))){
-                if(' '!=c&&'\n'!=c)throw new RuntimeException();
-            }
-        }while(++i<content_l);
-    }*/
     public void setto        (String content){
         //if(content==null)throw new NullPointerException();
         int l=content.length();
@@ -376,7 +365,7 @@ final public class VariableCollection implements Cloneable{
             if((!Character.isLetter(c))
                 &&'_'!=c
                 &&'$'!=c
-            )throw new IllegalArgumentException();
+            )throw new IllegalArgumentException("invalid variable name, variable name must begin with a letter, digit (a to z, A to Z, 0 to 9), '_' or '$'\nunread content starting from this sentence:\n"+content.substring(name_begin));
             while(Character.isLetterOrDigit(c=content.charAt(i))
                 ||'_'==c
                 ||'$'==c
@@ -392,18 +381,21 @@ final public class VariableCollection implements Cloneable{
             if('"'!=c)throw new IllegalArgumentException();
             value=new StringBuilder(64);
             while('"'!=(c=content.charAt(++i))){
-                value.append(
-                    switch(c){
-                        case'\n'->throw new IllegalArgumentException();
-                        case'\\'->switch(content.charAt(++i)){
-                            case'\\'->'\\';
-                            case '"'-> '"';
-                            case 'n'->'\n';
-                            default ->throw new IllegalArgumentException();
-                        };
-                        default ->c;
+                switch(c){
+                    case'\n'->throw new IllegalArgumentException();
+                    case'\\'->{
+                        if(++i==l)throw new IllegalArgumentException();
+                        value.append(
+                            switch(content.charAt(i)){
+                                case'\\'->'\\';
+                                case '"'-> '"';
+                                case 'n'->'\n';
+                                default ->throw new IllegalArgumentException();
+                            }
+                        );
                     }
-                );
+                    default ->value.append(c);
+                }
             }
             if(map_name_value.putIfAbsent(name,value.toString())!=null)throw new IllegalArgumentException();
             do++i;while( ' '==(c=content.charAt(i))
