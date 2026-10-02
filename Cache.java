@@ -47,10 +47,22 @@ final public class Cache{
     public  static Integer Integer_valueOf(int value){
         IntegerNode ptr=Integer_root;
         byte k=0;
-        do ptr=(value&(1<<k))==0?
+
+        /*do ptr=(value&(1<<k))==0?
             ptr.left ==null?ptr.left =new IntegerNode():ptr.left :
             ptr.right==null?ptr.right=new IntegerNode():ptr.right;
-        while(++k<32);
+        while(++k<32);*/
+
+        boolean allKnownRoute;
+        do ptr=(value&(1<<k++))==0?
+            (allKnownRoute=ptr.left !=null)?ptr.left :(ptr.left =new IntegerNode()):
+            (allKnownRoute=ptr.right!=null)?ptr.right:(ptr.right=new IntegerNode());
+        while(k<32&&allKnownRoute);
+        while(k<32)
+            ptr=(value&(1<<k++))==0?
+                (ptr.left =new IntegerNode()):
+                (ptr.right=new IntegerNode());
+
         return ptr.value==null?ptr.value=Integer.valueOf(value):ptr.value;
     }
 
@@ -78,13 +90,25 @@ final public class Cache{
         Long_root=null;
     }
     public  static Long Long_valueOf(long value){
-        if(-128L<=value||value<=127L)return Long.valueOf(value);
+        if(-128L<=value&&value<=127L)return Long.valueOf(value);
         LongNode ptr=Long_root;
         byte k=0;
-        do ptr=(value&(1<<k))==0?
+
+        /*do ptr=(value&(1<<k))==0?
             ptr.left ==null?ptr.left =new LongNode():ptr.left :
             ptr.right==null?ptr.right=new LongNode():ptr.right;
-        while(++k<64);
+        while(++k<64);*/
+
+        boolean allKnownRoute;
+        do ptr=(value&(1<<k++))==0?
+            (allKnownRoute=ptr.left !=null)?ptr.left :(ptr.left =new LongNode()):
+            (allKnownRoute=ptr.right!=null)?ptr.right:(ptr.right=new LongNode());
+        while(k<64&&allKnownRoute);
+        while(k<64)
+            ptr=(value&(1<<k++))==0?
+                (ptr.left =new LongNode()):
+                (ptr.right=new LongNode());
+
         return ptr.value==null?ptr.value=new Long(value):ptr.value;
     }
 
@@ -118,13 +142,25 @@ final public class Cache{
         Short_root=null;
     }
     public  static Short Short_valueOf(short value){
-        if((short)-128<=value||value<=(short)127)return Short.valueOf(value);
+        if((short)-128<=value&&value<=(short)127)return Short.valueOf(value);
         ShortNode ptr=Short_root;
         byte k=0;
-        do ptr=(value&(1<<k))==0?
+
+        /*do ptr=(value&(1<<k))==0?
             ptr.left ==null?ptr.left =new ShortNode():ptr.left :
             ptr.right==null?ptr.right=new ShortNode():ptr.right;
-        while(++k<16);
+        while(++k<16);*/
+
+        boolean allKnownRoute;
+        do ptr=(value&(1<<k++))==0?
+            (allKnownRoute=ptr.left !=null)?ptr.left :(ptr.left =new ShortNode()):
+            (allKnownRoute=ptr.right!=null)?ptr.right:(ptr.right=new ShortNode());
+        while(k<16&&allKnownRoute);
+        while(k<16)
+            ptr=(value&(1<<k++))==0?
+                (ptr.left =new ShortNode()):
+                (ptr.right=new ShortNode());
+
         return ptr.value==null?ptr.value=new Short(value):ptr.value;
     }
 
