@@ -1,454 +1,472 @@
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 final public class VariableCollection implements Cloneable{
 
-    /**
-     * construct a bijection from indexs to variable's name, and a mapping from 
-     * variable's name to variable's value
-     */
+    final private ConcurrentHashMap<Integer,String>index_name=new ConcurrentHashMap<>();
+    final private ConcurrentHashMap<String ,String>name_value=new ConcurrentHashMap<>();
+    private int variableCount=0;
+
+    final private static int MAX_VARIABLE_COUNT=256;
+    final private static int MAX_VARIABLE_NAME_LENGTH=256;
+
+    final private ReentrantReadWriteLock rwLock=new ReentrantReadWriteLock(false);
 
     /**
-     * designates index for each variable (name)
+     * create a new VC with no variable
      */
-    final private ConcurrentHashMap<Integer,String>map_index_name;
-    /**
-     * designates value for each variable (name)
-     */
-    final private ConcurrentHashMap<String ,String>map_name_value;
+    public VariableCollection(){}
 
-    /**
-     * constructors of empty VC
-     */
-
-    /**
-     * create a new VC with initial expected variable count (capacity) of 16
-     */
-    public VariableCollection(){
-        map_index_name=new ConcurrentHashMap<>();
-        map_name_value=new ConcurrentHashMap<>();
+    public int variableCount(){
+        rwLock.readLock().  lock();
+        int t=variableCount;
+        rwLock.readLock().unlock();
+        return t;
     }
-    /**
-     * create a new VC with initial expected variable count (capacity) of{@code
-     * expectedVariableCount}
-     * @param expectedVariableCount expected variable count
-     */
-    public VariableCollection(int expectedVariableCount){
-        map_index_name=new ConcurrentHashMap<>(expectedVariableCount);
-        map_name_value=new ConcurrentHashMap<>(expectedVariableCount);
+    public boolean isEmpty(){
+        //return variableCount()==0;
+        rwLock.readLock().  lock();
+        boolean t=variableCount==0;
+        rwLock.readLock().unlock();
+        return t;
+    }
+    public void clear(){
+        rwLock.writeLock().  lock();
+        index_name.clear();
+        name_value.clear();
+        variableCount=0;
+        rwLock.writeLock().unlock();
     }
 
     /**
-     * utilities for operation on a VC's structure, these methods are rarely 
-     * used in actual database or server, because the collection of VCs should 
-     * have all its VCs the same structure, e.g. a variable collection roughly 
-     * represents an instance with only String type fields (variables), if two 
-     * VCs have a different structure, they should be considered instances of 
-     * different classes, so it may be inappropriate to modify a VC's structure. 
-     * therefore may also be inappropritate to create empty VCs because they can 
-     * not store information, variables must be added to them to store 
-     * information, but doing so is considered inappropriate
-     */
-
-    /**
-     * does nothing if{@code variableName}is a valid name, otherwise throw 
-     * Throwables
+     * does nothing iff{@code variableName}is a valid variable name, else throw
+     * {@code NullPointerException}or{@code IllegalArgumentException}
      * 
-     * a String is a valid variable name iff it is not{@code null} and is not 
-     * the empty String{@code ""}, and contains only the following chars: 
+     * a String is a valid variable name, iff the String is not{@code null}and
+     * does not equal to the empty String{@code ""}, and its every char is a
+     * digit(0 to 9), letter(a to z, A to Z), '_' or '$', and begins with a non-
+     * digit char, and the length of String is no greater than the maximum 
+     * variable name length allowed
      * 
-     *  a to z, A to Z (letters)
-     * 
-     *  0 to 9 (digits)
-     * 
-     *  _ and $
-     * 
-     * and begins with a non digit char
-     * @param variableName name to check
-     * @throws NullPointerException iff{@code variableName}is{@code null}
-     * @throws IllegalArgumentException iff{@code variableName}is not valid
+     * @param variableName the variable name to check
+     * @throws NullPointerException iff{@code variableName==null}
+     * @throws IllegalArgumentException iff{@code variableName}is not a valid
+     * variable name
      */
     private static void checkValidityOfVariableName(String variableName){
-        //if(variableName==null)throw new NullPointerException();
         int i=variableName.length();
-        if(i==0)throw new IllegalArgumentException("invalid variable name, variable name can not be the empty String \"\"\nvariable name: "+variableName+'\n');
+        if(i==0||MAX_VARIABLE_NAME_LENGTH<i)throw new IllegalArgumentException();
         char c=variableName.charAt(0);
         if( !(  Character.isLetter(c)
                 ||'_'==c
                 ||'$'==c
             )
-        )throw new IllegalArgumentException("invalid variable name, variable name must begin with a letter, digit (a to z, A to Z, 0 to 9), '_' or '$'\nvariable name: "+variableName+'\n');
+        )throw new IllegalArgumentException();
         while(i>1)
             if( !(  Character.isLetterOrDigit(c=variableName.charAt(--i))
                     ||'_'==c
                     ||'$'==c
                 )
-            )throw new IllegalArgumentException("invalid variable name, variable name must contain only letters, digits (a to z, A to Z, 0 to 9), '_' or '$'\nvariable name: "+variableName+'\n');
+            )throw new IllegalArgumentException();
     }
     /**
-     * declare a new variable at the tail of this VC
-     * @param variableName variable's name
-     * @throws RuntimeException iff this VC already declared a variable with 
-     * name{@code variableName}
-     * @throws NullPointerException iff{@code variableName}is{@code null}
-     * @throws IllegalArgumentException iff{@code variableName}is not valid
+     * declare a new variable at the tail of this VC with name
+     * {@code variableName}and default initial value{@code ""}
+     * 
+     * @param variableName the name of the new variable to declare and add
+     * @throws NullPointerException iff{@code variableName==null}
+     * @throws IllegalArgumentException iff{@code variableName}is not a valid
+     * variable name
+     * @throws RuntimeException iff this VC already contained a variable with
+     * name{@code variableName}, or this VC's variable count is the maximum 
+     * variable count allowed
      */
     public void add   (String variableName){
         checkValidityOfVariableName(variableName);
-        if(map_name_value.putIfAbsent(variableName,"")!=null)throw new RuntimeException("repeated declaration: this VC already declared a variable with name: "+variableName);
-        map_index_name.put(Cache.Integer_valueOf(map_index_name.size()),variableName);
+        rwLock.writeLock().  lock();
+        try{
+            if(variableCount==MAX_VARIABLE_COUNT)
+                throw new RuntimeException();
+            if(name_value.putIfAbsent(variableName,"")!=null)
+                throw new RuntimeException();
+        }catch(Throwable e){
+            rwLock.writeLock().unlock();
+            throw e;
+        }
+        index_name.put(Cache.getInteger(variableCount),variableName);
+        ++variableCount;
+        rwLock.writeLock().unlock();
     }
     /**
-     * remove a variable from this VC
-     * @param variableName variable's name
-     * @throws RuntimeException iff this VC does not contain a variable with 
+     * remove the variable of this VC with name{@code variableName}
+     * 
+     * @param variableName the name of the variable to remove
+     * @throws NullPointerException iff{@code variableName==null}
+     * @throws RuntimeException iff this VC does not contain a variable with
      * name{@code variableName}
-     * @throws NullPointerException iff{@code variableName}is{@code null}
-     * @throws IllegalArgumentException iff{@code variableName}is not valid
      */
     public void remove(String variableName){
-        checkValidityOfVariableName(variableName);
-        if(map_name_value.remove(variableName)==null)throw new RuntimeException("this VC does not contain a variable with name: "+variableName);
-        int i=map_name_value.size();
-        while(!map_index_name.get(Cache.Integer_valueOf(i)).equals(variableName))--i;
-        for(int k=i+1,l=map_index_name.size();k<l;k=(i=k)+1)
-            map_index_name.put(Cache.Integer_valueOf(i),map_index_name.get(Cache.Integer_valueOf(k)));
-        map_index_name.remove(Cache.Integer_valueOf(i));
+        rwLock.writeLock().  lock();
+        try{
+            if(name_value.remove(variableName)==null)
+                throw new RuntimeException();
+        }catch(Throwable e){
+            rwLock.writeLock().unlock();
+            throw e;
+        }
+        Integer i=Cache.getInteger(--variableCount);
+        while(!index_name.get(i).equals(variableName))
+            i=Cache.getInteger(i.intValue()-1);
+        Integer k=Cache.getInteger(i.intValue()+1);
+        while(k.intValue()<=variableCount){
+            index_name.put(
+                i,index_name.get(k)
+            );
+            k=Cache.getInteger((i=k).intValue()+1);
+        }
+        index_name.remove(i);
+        rwLock.writeLock().unlock();
+    }
+
+    /**
+     * @param variableName the name of the variable to find
+     * @return the index in this VC of the variable with name
+     * {@code variableName}, or{@code -1}if such variable does not exist
+     * @throws NullPointerException iff{@code variableName==null}
+     */
+    public int      indexOfVariable(String variableName){
+        if(variableName==null)throw new NullPointerException();
+        rwLock.readLock().  lock();
+
+        int k=variableCount;
+        while(k>0)
+            if(index_name.get(Cache.getInteger(--k)).equals(variableName)){
+                rwLock.readLock().unlock();
+                return k;
+            }
+        /*for(int k=0;k<variableCount;++k)
+            if(index_name.get(Cache.getInteger(k)).equals(variableName)){
+                rwLock.readLock().unlock();
+                return k;
+            }*/
+
+        rwLock.readLock().unlock();
+        return-1;
     }
     /**
-     * @param index the index of variable in this VC
-     * @return the name of the variable in this VC with index{@code index}
-     * @throws IndexOutOfBoundsException iff this VC does not contain a variable 
-     * with index{@code index}
+     * @param variableName the name of the variable to find
+     * @return {@code true}iff this VC contains a variable with name
+     * {@code variableName}
+     * @throws NullPointerException iff{@code variableName==null}
+     */
+    public boolean containsVariable(String variableName){
+        boolean t;
+        rwLock.readLock().lock();
+        try{
+            t=name_value.get(variableName)!=null;
+        }finally{
+            rwLock.readLock().unlock();
+        }
+        return t;
+    }
+    /**
+     * @param value the value of the variable to find
+     * @return the index in this VC of the first occurence of a variable with
+     * value{@code value}, or{@code -1}if such variable does not exist
+     * @throws NullPointerException iff{@code value==null}
+     */
+    public int      indexOfValue   (String value       ){
+        if(value==null)throw new NullPointerException();
+        rwLock.readLock().  lock();
+        for(int k=0;k<variableCount;++k)
+            if(name_value.get(index_name.get(Cache.getInteger(k))).equals(value)){
+                rwLock.readLock().unlock();
+                return k;
+            }
+        rwLock.readLock().unlock();
+        return-1;
+    }
+    /**
+     * @param value the value of the variable to find
+     * @return {@code true}iff this VC contains a variable with value
+     * {@code value}
+     * @throws NullPointerException iff{@code value==null}
+     */
+    public boolean containsValue   (String value       ){
+        boolean t;
+        rwLock.readLock().lock();
+        try{
+            t=name_value.containsValue(value);
+        }finally{
+            rwLock.readLock().unlock();
+        }
+        return t;
+    }
+
+    /**
+     * @param index the index in this VC of the variable to find
+     * @return the name of the variable with index{@code index}in this VC
+     * @throws NullPointerException iff{@code index==null}
+     * @throws IndexOutOfBoundsException iff there exists no variable with index
+     * {@code index}in this VC
      */
     public String variableAt(Integer index){
-        String n=map_index_name.get(index);
-        if(n==null)throw new IndexOutOfBoundsException("index "+index.intValue()+" not in [0,"+map_index_name.size()+')');
-        return n;
+        String t;
+        rwLock.readLock().lock();
+        try{
+            if((t=index_name.get(index))==null)
+                throw new IndexOutOfBoundsException(
+                    "index "+index.intValue()+" is not in interval [0,"+variableCount+')'
+                );
+        }finally{
+            rwLock.readLock().unlock();
+        }
+        return t;
     }
     /**
-     * @param index the index of variable in this VC
-     * @return the name of the variable in this VC with index{@code index}
-     * @throws IndexOutOfBoundsException iff this VC does not contain a variable 
-     * with index{@code index}
+     * @param index the index in this VC of the variable to find
+     * @return the name of the variable with index{@code index}in this VC
+     * @throws IndexOutOfBoundsException iff there exists no variable with index
+     * {@code index}in this VC
      */
     public String variableAt(int     index){
-        String n=map_index_name.get(Cache.Integer_valueOf(index));
-        if(n==null)throw new IndexOutOfBoundsException("index "+index+" not in [0,"+map_index_name.size()+')');
-        return n;
+        return variableAt(Cache.getInteger(index));
     }
     /**
-     * @param index the index of variable in this VC
-     * @return the value of the variable in this VC with index{@code index}
-     * @throws IndexOutOfBoundsException iff this VC does not contain a variable 
-     * with index{@code index}
+     * @param index the index in this VC of the variable to find
+     * @return the value of the variable with index{@code index}in this VC
+     * @throws NullPointerException iff{@code index==null}
+     * @throws IndexOutOfBoundsException iff there exists no variable with index
+     * {@code index}in this VC
      */
     public String    valueAt(Integer index){
-        return map_name_value.get(variableAt(index));
+        String t;
+        rwLock.readLock().lock();
+        try{
+            t=name_value.get(variableAt(index));
+        }finally{
+            rwLock.readLock().unlock();
+        }
+        return t;
     }
     /**
-     * @param index the index of variable in this VC
-     * @return the value of the variable in this VC with index{@code index}
-     * @throws IndexOutOfBoundsException iff this VC does not contain a variable 
-     * with index{@code index}
+     * @param index the index in this VC of the variable to find
+     * @return the value of the variable with index{@code index}in this VC
+     * @throws IndexOutOfBoundsException iff there exists no variable with index
+     * {@code index}in this VC
      */
     public String    valueAt(int     index){
-        return map_name_value.get(variableAt(index));
-    }
-    /**
-     * @param variableName variable's name to find
-     * @return{@code i}s.t.{@code variableAt(i).equals(variableName)}, or
-     * {@code -1}if no such{@code i}
-     * @throws NullPointerException iff{@code variableName}is{@code null}
-     * @throws IllegalArgumentException iff{@code variableName}is not valid
-     */
-    public int     indexOfVariable (String variableName ){
-        checkValidityOfVariableName(variableName);
-        int i=map_index_name.size();
-        while(i>0)
-            if(map_index_name.get(Cache.Integer_valueOf(--i)).equals(variableName))
-                return i;
-        return-1;
-    }
-    /**
-     * @param variableName variable's value to find
-     * @return{@code i}s.t.{@code valueAt(i).equals(value)}, or{@code -1}if no 
-     * such{@code i}
-     */
-    public int     indexOfValue    (String         value){
-        int i=map_index_name.size();
-        while(i>0)
-            if(map_name_value.get(map_index_name.get(Cache.Integer_valueOf(--i))).equals(value))
-                return i;
-        return-1;
-    }
-    /**
-     * @param variableName variable's name to find
-     * @return{@code indexOfVariable(variableName)!=-1}
-     * @throws NullPointerException iff{@code variableName}is{@code null}
-     * @throws IllegalArgumentException iff{@code variableName}is not valid
-     */
-    public boolean containsVariable(String variableName ){
-        checkValidityOfVariableName(variableName);
-        return map_name_value.containsKey(variableName);
-    }
-    /**
-     * @param value variable's value to find
-     * @return{@code indexOfValue(value)!=-1}
-     */
-    public boolean containsValue   (String         value){
-        return map_name_value.containsValue(value);
-    }
-    /**
-     * @return the number of variables contained in this VC
-     */
-    public int variableCount(){
-        return map_index_name.size();
-    }
-    /**
-     * @return{@code variableCount()==0}
-     */
-    public boolean isEmpty  (){
-        return map_index_name.isEmpty();
-    }
-    /**
-     * remove all variables in this VC
-     * 
-     * after call,{@code isEmpty()}is{@code true}
-     */
-    public void    clear    (){
-        map_index_name.clear();
-        map_name_value.clear();
+        return valueAt(Cache.getInteger(index));
     }
 
     /**
-     * most frequently used methods in actual database and server
-     */
-
-    /**
-     * assign value to a variable in this VC
-     * @param variableName variable's name
-     * @param value value to assign
-     * @throws RuntimeException iff this VC does not contain a variable with 
+     * set the variable with name{@code variableName}of this VC to{@code value}
+     * @param variableName the name of the variable to set
+     * @param value the value set to the variable to set
+     * @throws NullPointerException iff{@code variableName==null||value==null}
+     * @throws RuntimeException iff this VC does not contain a variable with
      * name{@code variableName}
-     * @throws NullPointerException iff{@code variableName}is{@code null}
-     * @throws IllegalArgumentException iff{@code variableName}is not valid
      */
     public void   set(String variableName,String value){
-        checkValidityOfVariableName(variableName);
-        if(map_name_value.replace(variableName,value)==null)throw new RuntimeException("this VC does not contain a variable with name: "+variableName);
+        rwLock.writeLock().lock();
+        try{
+            if(name_value.replace(variableName,value)==null)
+                throw new RuntimeException();
+        }finally{
+            rwLock.writeLock().unlock();
+        }
     }
     /**
-     * get the value of a variable in this VC
-     * @param variableName variable's name
-     * @return value of the variable with name{@code variableName} in this VC
-     * @throws RuntimeException iff this VC does not contain a variable with 
+     * @param variableName the name of the variable to read
+     * @return the value of the variable to read
+     * @throws NullPointerException iff{@code variableName==null}
+     * @throws RuntimeException iff this VC does not contain a variable with
      * name{@code variableName}
-     * @throws NullPointerException iff{@code variableName}is{@code null}
-     * @throws IllegalArgumentException iff{@code variableName}is not valid
      */
     public String get(String variableName             ){
-        checkValidityOfVariableName(variableName);
-        String v=map_name_value.get(variableName);
-        if(v==null)throw new RuntimeException("this VC does not contain a variable with name: "+variableName);
-        return v;
-    }
-
-    /**
-     * methods defining the equivalence relations of VCs
-     */
-
-    /**
-     * two VCs are structurally equal iff they satisfy all of the followings:
-     * 
-     * both are not{@code null}
-     * 
-     * {@code variableCount()}are equal
-     * 
-     * for every index{@code i}from{@code 0}to{@code variableCount()-1}, their 
-     * {@code i}th variable have the same name
-     * 
-     * @param y the VC to compare
-     * @return{@code true}iff this VC and y have the same structure
-     */
-    public boolean structurallyEqual (VariableCollection y){
-        if(y==null)return false;
-        Integer I       =Cache.Integer_valueOf(map_name_value.size()-1);
-        if(I.intValue()!=                    y.map_name_value.size()-1)return false;
-        while(I.intValue()>=0){
-            if(!map_index_name.get(I).equals(y.map_index_name.get(I)))return false;
-            I=Cache.Integer_valueOf(I.intValue()-1);
+        String t;
+        rwLock.readLock().lock();
+        try{
+            if((t=name_value.get(variableName))==null)throw new RuntimeException();
+        }finally{
+            rwLock.readLock().unlock();
         }
-        return true;
+        return t;
     }
-    /**
-     * two VCs are equal iff they are structurally equal, and for every index
-     * {@code i}from{@code 0}to{@code variableCount()-1}, their {@code i}th 
-     * variable have the same value
-     * 
-     * @param y the VC to compare
-     * @return{@code true}iff this VC and y have the same content
-     */
-    public boolean             equals(VariableCollection y){
-        if(y==null)return false;
-        Integer I       =Cache.Integer_valueOf(map_name_value.size()-1);
-        if(I.intValue()!=                    y.map_name_value.size()-1)return false;
-        String name  ;
-        String name_y;
-        while(I.intValue()>=0){
-            if( !(  (name=map_index_name.get(I))  .equals(name_y=y.map_index_name.get(I))
-                    &&    map_name_value.get(name).equals(       y.map_name_value.get(name_y))
-                )
-            )return false;
-            I=Cache.Integer_valueOf(I.intValue()-1);
+
+    public String[]toStrings(){
+        int i=0;
+        String n;
+        rwLock.readLock().  lock();
+        String[]l=new String[variableCount*2];
+        for(int k=0;k<variableCount;++k){
+            l[i]=n=index_name.get(Cache.getInteger(k));
+            l[++i]=name_value.get(n);
+            ++i;
         }
-        return true;
+        rwLock.readLock().unlock();
+        return l;
     }
-    /**
-     * a VC equals to an Object, iff the latter is not{@code null}and is a VC, 
-     * and both have the same content
-     * @param y the Object to compare
-     * @return{@code true}iff y is not{@code null}and is a VC, and have the same 
-     * content as this VC
-     */
-    @Override
-    public boolean             equals(Object             y){
-        return y instanceof VariableCollection vc?equals(vc):false;
-    }
-    /**
-     * @return the sum of
-     * {@code (i+1)*variableAt(i).hashCode()*valueAt(i).hashCode}
-     */
-    @Override public int hashCode(){
-        int[]h=new int[1];
-        map_index_name.forEach(
-            (i,n)->{h[0]+=(i.intValue()+1)*n.hashCode()*map_name_value.get(n).hashCode();}
-        );
-        return h[0];
-    }
-
-    /**
-     * methods whose meaning rely on the definition of equivalence relations of 
-     * VCs
-     */
-
-    /**
-     * copy the content of{@code vc}to a new empty VC
-     * 
-     * {@code new VariableCollection(vc).equals(vc)}is always{@code true}
-     * 
-     * if{@code vc}is the VC to be constructed, the creation of new VC can be 
-     * replaced by{@code new VariableCollection}
-     * @param vc the VC to be copied
-     */
-    public VariableCollection(VariableCollection vc){
-        if(vc==this){
-            map_index_name=new ConcurrentHashMap<>();
-            map_name_value=new ConcurrentHashMap<>();
-        }else{
-            int l=vc.map_index_name.size();
-            map_index_name=new ConcurrentHashMap<>(l);
-            map_name_value=new ConcurrentHashMap<>(l);
+    private void recover(String[]recovery){
+        int k=0;
+        String n;
+        rwLock.writeLock().  lock();
+        index_name.clear();
+        name_value.clear();
+        variableCount=0;
+        while(k<recovery.length){
+            index_name.put(Cache.getInteger(variableCount),n=recovery[k]);
+            name_value.put(n,recovery[++k]);
+            ++k;
+            ++variableCount;
         }
-
-        vc.map_index_name.forEach(
-            (i,n)->{map_index_name.put(i,n);}
-        );
-        vc.map_name_value.forEach(
-            (n,v)->{map_name_value.put(n,v);}
-        );
-
-        /*vc.map_index_name.forEach(
-            (i,n)->{
-                map_index_name.put(i,n);
-                map_name_value.put(n,vc.map_name_value.get(n));
+        rwLock.writeLock().unlock();
+    }
+    public void setto        (String[]strings){
+        int k=0;
+        String n;
+        rwLock.writeLock().lock();
+        String[]recovery=toStrings();
+        clear();
+        try{
+            while(k<strings.length){
+                add(n=strings[k]);
+                name_value.put(n,strings[++k]);
+                ++k;
             }
-        );*/
-
-    }
-    /**
-     * copy and set the content of{@code vc}to this VC
-     * 
-     * after call,{@code equals(vc)}is{@code true}
-     * 
-     * if{@code vc}is this VC, this method does nothing
-     * @param vc the VC to be copied
-     */
-    public void setto        (VariableCollection vc){
-        if(vc!=this){
-            map_index_name.clear();
-            map_name_value.clear();
-
-            vc.map_index_name.forEach(
-                (i,n)->{map_index_name.put(i,n);}
-            );
-            vc.map_name_value.forEach(
-                (n,v)->{map_name_value.put(n,v);}
-            );
-
-            /*vc.map_index_name.forEach(
-                (i,n)->{
-                    map_index_name.put(i,n);
-                    map_name_value.put(n,vc.map_name_value.get(n));
-                }
-            );*/
-
+        }catch(Throwable e){
+            recover(recovery);
+            throw e;
+        }finally{
+            rwLock.writeLock().unlock();
         }
     }
-    /**
-     * @return a new VC{@code vc}s.t.{@code equals(clone())}is{@code true}
-     */
-    @Override public VariableCollection clone(){
-        return new VariableCollection(this);
+    public VariableCollection(String[]strings){
+        //setto(strings);
+        int k=0;
+        String n;
+        try{
+            while(k<strings.length){
+                add(n=strings[k]);
+                name_value.put(n,strings[++k]);
+                ++k;
+            }
+        }catch(Throwable e){
+            clear();
+            throw e;
+        }
     }
 
-    /**
-     * utilities for IO on conversions
-     */
+    public String[]structure(){
+        rwLock.readLock().  lock();
+        int k=variableCount;
+        String[]l=new String[variableCount];
+        while(k>0){
+            --k;
+            l[k]=index_name.get(Cache.getInteger(k));
+        }
+        rwLock.readLock().unlock();
+        return l;
+    }
+    public String[]cartesian(){
+        rwLock.readLock().  lock();
+        int k=variableCount;
+        String[]l=new String[variableCount];
+        while(k>0){
+            --k;
+            l[k]=name_value.get(
+                index_name.get(Cache.getInteger(k))
+            );
+        }
+        rwLock.readLock().unlock();
+        return l;
+    }
+    public void setto        (String[]structure,String[]cartesian){
+        if(structure.length!=cartesian.length)throw new RuntimeException();
+        String n;
+        rwLock.writeLock().lock();
+        String[]recovery=toStrings();
+        clear();
+        try{
+            for(int k=0;k<structure.length;++k){
+                add(n=structure[k]);
+                name_value.put(n,cartesian[k]);
+            }
+        }catch(Throwable e){
+            recover(recovery);
+            throw e;
+        }finally{
+            rwLock.writeLock().unlock();
+        }
+    }
+    public VariableCollection(String[]structure,String[]cartesian){
+        //setto(structure,cartesian);
+        if(structure.length!=cartesian.length)throw new RuntimeException();
+        String n;
+        try{
+            for(int k=0;k<structure.length;++k){
+                add(n=structure[k]);
+                name_value.put(n,cartesian[k]);
+            }
+        }catch(Throwable e){
+            clear();
+            throw e;
+        }
+    }
 
-    //
-    private static void checkValidityOfStorage(String storage){
-        //if(storage==null)throw new NullPointerException();
+    @Override public int hashCode(){
+        int h=0,k=0;
+        String n;
+        rwLock.readLock().  lock();
+        while(k<variableCount){
+            h+=(n=index_name.get(Cache.getInteger(k))).hashCode();
+            h*=(++k)*name_value.get(n).hashCode();
+        }
+        rwLock.readLock().unlock();
+        return h;
+    }
+
+    /*private static void checkValidityOfStorage(String storage){
         int l=storage.length(),k=0;
         while(k<l)
             switch(storage.charAt(k++)){
-                case'\n'->throw new IllegalArgumentException();
                 case '"'->throw new IllegalArgumentException();
+                case'\n'->throw new IllegalArgumentException();
                 case'\\'->{
                     if(k==l)throw new IllegalArgumentException();
                     switch(storage.charAt(k++)){
-                        case'\\'->{}
                         case '"'->{}
                         case 'n'->{}
+                        case'\\'->{}
                         default ->throw new IllegalArgumentException();
                     }
                 }
             }
-    }
-    //
-    private static String storageTOmemory (String storage){
+    }*/
+    /*private static String storageTOmemory (String storage){
         char[]value=new char[storage.length()];
         int i_storage=0,
             i_value  =0;
         char c;
         while(i_storage<value.length)
             switch(c=storage.charAt(i_storage++)){
-                case'\n'->throw new IllegalArgumentException();
                 case '"'->throw new IllegalArgumentException();
+                case'\n'->throw new IllegalArgumentException();
                 case'\\'->{
                     if(i_storage==value.length)throw new IllegalArgumentException();
                     value[i_value++]=switch(storage.charAt(i_storage++)){
-                        case'\\'->'\\';
                         case '"'-> '"';
                         case 'n'->'\n';
+                        case'\\'->'\\';
                         default ->throw new IllegalArgumentException();
                     };
                 }
                 default ->value[i_value++]=c;
             }
         return new String(value,0,i_value);
-    }
-    private static String  memoryTOstorage(String value  ){
+    }*/
+    /*private static String  memoryTOstorage(String value  ){
         int l=value.length();
         StringBuilder storage=new StringBuilder((int)(1.03d*(double)l));
         char c;
@@ -461,154 +479,142 @@ final public class VariableCollection implements Cloneable{
                 storage.append(c);
             }
         return storage.toString();
-    }
+    }*/
 
-    /**
-     * @param nextLines the number of lines between sentences
-     * @return a String representation of this VC, with{@code nextLines}lines 
-     * between sentences
-     * @throws IllegalArgumentException iff{@code nextLines<0}
-     */
-    private String content(int nextLines){
-        if(nextLines<0)throw new IllegalArgumentException("number of lines between sentences can not be negative");
+    private String toString(int nextLines){
+        if(nextLines<0)throw new IllegalArgumentException();
         String nextLine="\";";
         while(nextLines>0){
             nextLine+='\n';
             --nextLines;
         }
         int[]ls=new int[2];
-        map_name_value.forEach(
+        rwLock.readLock().lock();
+        name_value.forEach(
             (n,v)->{
                 ls[0]+=n.length();
                 ls[1]+=v.length();
             }
         );
-        int l=map_index_name.size();
         StringBuilder str=new StringBuilder(
-            ls[0]+l*(2+nextLine.length())+
+            ls[0]+variableCount*(2+nextLine.length())+
             (int)(1.03d*(double)ls[1])
         );
-        String n;
-        while(nextLines<l){
-            str.append(n=map_index_name.get(Cache.Integer_valueOf(nextLines++)));
+        String n,v;
+        int v_l,k;
+        char c;
+        while(nextLines<variableCount){
+            str.append(n=index_name.get(Cache.getInteger(nextLines++)));
             str.append("=\"");
-            str.append(memoryTOstorage(map_name_value.get(n)));
+            v_l=(v=name_value.get(n)).length();
+            for(k=0;k<v_l;++k)
+                if('\n'==(c=v.charAt(k)))
+                    str.append("\\n");
+                else{
+                    if('"'==c||'\\'==c)
+                        str.append('\\');
+                    str.append(c);
+                }
             str.append(nextLine);
         }
+        rwLock.readLock().unlock();
         return str.toString();
     }
-
-    /**
-     * @return a minimal String representation of this VC
-     */
-    public String content(){
-        return content(0);
+    @Override
+    public String toString(){
+        return toString(1);
     }
-    /**
-     * @return the encoding with UTF-8 of the minimal String representation of 
-     * this VC
-     */
-    public byte[] bytes  (){
-        return content(0).getBytes(StandardCharsets.UTF_8);
+    public byte[] toBytes (){
+        return toString(0).getBytes(StandardCharsets.UTF_8);
     }
-    /**
-     * create a new VC with content{@code content}
-     * @param content the content of new VC
-     */
-    public VariableCollection(String content){
-        map_index_name=new ConcurrentHashMap<>();
-        map_name_value=new ConcurrentHashMap<>();
-        setto(content);
-    }
-    /**
-     * create a new VC with content{@code bytes}
-     * @param bytes the content of new VC
-     */
-    public VariableCollection(byte[] bytes  ){
-        map_index_name=new ConcurrentHashMap<>();
-        map_name_value=new ConcurrentHashMap<>();
-        setto(new String(bytes,StandardCharsets.UTF_8));
-    }
-    //
-    /**
-     * set the content of this VC to{@code content}
-     * @param content the content to set
-     */
-    public void setto        (String content){
-        //if(content==null)throw new NullPointerException();
-        int l=content.length();
-        int i=l;
-        char c;
+    public void setto        (String string){
+        int l=string.length(),i=l;
         boolean allEmpty=true;
+        char c='J';
         while(allEmpty&&i>0)
-            allEmpty=
-                   ' '==(c=content.charAt(--i))
-                ||'\n'== c;
-        map_index_name.clear();
-        map_name_value.clear();
-        if(allEmpty)return;
-        if(++i<l)content=content.substring(0,l=i);
-        int name_begin,line=i=0;
-        String name;
-        StringBuilder value;
-        do{ while( ' '==(c=content.charAt(i))
-                ||'\n'== c)++i;
-            name_begin=i++;
-            if((!Character.isLetter(c))
-                &&'_'!=c
-                &&'$'!=c
-            )throw new IllegalArgumentException("invalid variable name, variable name must begin with a letter, digit (a to z, A to Z, 0 to 9), '_' or '$'\nunread content starting from this sentence:\n"+content.substring(name_begin));
-            while(Character.isLetterOrDigit(c=content.charAt(i))
-                ||'_'==c
-                ||'$'==c
-            )++i;
-            map_index_name.put(Cache.Integer_valueOf(line++),name=content.substring(name_begin,i));
-            while( ' '==(c=content.charAt(i))
-                ||'\n'== c
-            )++i;
-            if('='!=c)throw new IllegalArgumentException("sentence incorrect grammar, missing assignment operator '='\nunread content starting from this sentence:\n"+content.substring(name_begin));
-            do++i;while( ' '==(c=content.charAt(i))
-                    ||  '\n'== c
-            );
-            if('"'!=c)throw new IllegalArgumentException("sentence incorrect grammar, value not wrapped in '\"' symbol\nunread content starting from this sentence:\n"+content.substring(name_begin));
-            value=new StringBuilder(64);
-            while('"'!=(c=content.charAt(++i))){
-                switch(c){
-                    case'\n'->throw new IllegalArgumentException();
-                    case'\\'->{
-                        if(++i==l)throw new IllegalArgumentException();
-                        value.append(
-                            switch(content.charAt(i)){
-                                case'\\'->'\\';
-                                case '"'-> '"';
-                                case 'n'->'\n';
-                                default ->throw new IllegalArgumentException();
-                            }
-                        );
-                    }
-                    default ->value.append(c);
+            allEmpty=' '==(c=string.charAt(--i))
+                ||  '\n'== c;
+        if(allEmpty){
+            clear();
+            return;
+        }
+        if(c!=';')throw new IllegalArgumentException();
+        if(++i!=l)string=string.substring(0,l=i);
+        i=0;
+        rwLock.writeLock().lock();
+        String[]recovery=toStrings();
+        clear();
+        try{do{ while( ' '==(c=string.charAt(i))
+                    ||'\n'== c
+                )++i;
+                /*if(
+                    (!Character.isLetter(c))
+                    &&'_'!=c
+                    &&'$'!=c
+                )throw new IllegalArgumentException();*/
+                int name_begin=i;
+                c=string.charAt(++i);
+                while(  c!=' '&&
+                        c!='='&&
+                        c!='\n'
+                ){  /*if(
+                        (!Character.isLetterOrDigit(c))
+                        &&'_'!=c
+                        &&'$'!=c
+                    )throw new IllegalArgumentException();*/
+                    c=string.charAt(++i);
                 }
-            }
-            if(map_name_value.putIfAbsent(name,value.toString())!=null)throw new IllegalArgumentException("repeated declaration: this VC already declared a variable with name: "+name+"\nfail to create VC with content:\n"+content);
-            do++i;while( ' '==(c=content.charAt(i))
-                    ||  '\n'== c
-            );
-            if(c!=';')throw new IllegalArgumentException("sentence incorrect grammar, sentence does not end with ';'\nunread content starting from this sentence:\n"+content.substring(name_begin));
-        }while(++i<l);
+                //if(MAX_VARIABLE_NAME_LENGTH<i-name_begin)throw new IllegalArgumentException();
+                String name=string.substring(name_begin,i);
+                add(name);
+                while(c==' '
+                    ||c=='\n'
+                )c=string.charAt(++i);
+                if(c!='=')throw new IllegalArgumentException();
+                do c=string.charAt(++i);while(
+                    c==' '||
+                    c=='\n'
+                );
+                if(c!='"')throw new IllegalArgumentException();
+                StringBuilder value=new StringBuilder(64);
+                while('"'!=(c=string.charAt(++i))){
+                    switch(c){
+                        case'\n'->throw new IllegalArgumentException();
+                        case'\\'->{
+                            if(++i==l)throw new IllegalArgumentException();
+                            value.append(
+                                switch(string.charAt(i)){
+                                    case '"'-> '"';
+                                    case 'n'->'\n';
+                                    case'\\'->'\\';
+                                    default ->throw new IllegalArgumentException();
+                                }
+                            );
+                        }
+                        default ->value.append(c);
+                    }
+                }
+                do c=string.charAt(++i);while(
+                    c==' '||
+                    c=='\n'
+                );
+                if(c!=';')throw new IllegalArgumentException();
+                name_value.put(name,value.toString());
+            }while(++i<l);
+        }catch(Throwable e){
+            recover(recovery);
+            throw e;
+        }finally{
+            rwLock.writeLock().unlock();
+        }
     }
-    /**
-     * set the content of this VC to{@code bytes}
-     * @param bytes the content to set
-     */
-    public void setto        (byte[] bytes  ){
+    public void setto        (byte[] bytes ){
         setto(new String(bytes,StandardCharsets.UTF_8));
     }
-
-    /**
-     * @return a String representation of this VC, with one line between 
-     * sentences
-     */
-    @Override public String toString(){
-        return content(1);
+    public VariableCollection(String string){
+        setto(string);
+    }
+    public VariableCollection(byte[] bytes ){
+        setto(bytes );
     }
 }
