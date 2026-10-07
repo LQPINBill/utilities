@@ -1,51 +1,44 @@
-
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 final public class Cache{
-
-    public  static Boolean Boolean_valueOf(boolean value){
-        return value?Boolean.TRUE:Boolean.FALSE;
-    }
-    public  static Boolean Boolean_valueOf(byte    value){
-        return Boolean_valueOf(value!=(byte) 0 );
-    }
-    public  static Boolean Boolean_valueOf(short   value){
-        return Boolean_valueOf(value!=(short)0 );
-    }
-    public  static Boolean Boolean_valueOf(int     value){
-        return Boolean_valueOf(value!=       0 );
-    }
-    public  static Boolean Boolean_valueOf(long    value){
-        return Boolean_valueOf(value!=       0L);
-    }
-    public  static Boolean Boolean_valueOf(Object  value){
-        return Boolean_valueOf(value!=     null);
-    }
-
+    private Cache(){}
+    final private static ReentrantReadWriteLock rwLock=new ReentrantReadWriteLock(false);
+    public static Byte    getByte   (byte    value){return Byte.valueOf(value);}
+    public static Boolean getBoolean(boolean value){return value           ?Boolean.TRUE:Boolean.FALSE;}
+    public static Boolean getBoolean(byte    value){return value!=(byte )0 ?Boolean.TRUE:Boolean.FALSE;}
+    public static Boolean getBoolean(short   value){return value!=(short)0 ?Boolean.TRUE:Boolean.FALSE;}
+    public static Boolean getBoolean(int     value){return value!=       0 ?Boolean.TRUE:Boolean.FALSE;}
+    public static Boolean getBoolean(long    value){return value!=       0L?Boolean.TRUE:Boolean.FALSE;}
+    public static Boolean getBoolean(Object  value){return value!=     null?Boolean.TRUE:Boolean.FALSE;}
 //==============================================================================
-
     final private static class IntegerNode{
         private IntegerNode left,right;
         private Integer value;
         private IntegerNode(){}
     }
-    private static IntegerNode Integer_root;
-    public  static void    Integer_malloc (){
-        Integer_root=new IntegerNode();
+    private static IntegerNode rootInteger;
+    public  static void mallocIntegers(){
+        rwLock.writeLock().  lock();
+        if(rootInteger==null)rootInteger=new IntegerNode();
+        rwLock.writeLock().unlock();
     }
-    private static void    Integer_free   (IntegerNode node){
+    private static void   freeIntegers(IntegerNode node){
         if(node==null)return;
         node.value=null;
-        Integer_free(node.left );
+        freeIntegers(node.left );
         node.left =null;
-        Integer_free(node.right);
+        freeIntegers(node.right);
         node.right=null;
     }
-    public  static void    Integer_free   (){
-        Integer_free(Integer_root);
-        Integer_root=null;
+    public  static void   freeIntegers(){
+        rwLock.writeLock().  lock();
+        freeIntegers(rootInteger);
+        rootInteger=null;
+        rwLock.writeLock().unlock();
     }
-    public  static Integer Integer_valueOf(int value){
-        IntegerNode ptr=Integer_root;
+    public  static Integer getInteger (int value){
+        rwLock.writeLock().  lock();
+        IntegerNode ptr=rootInteger;
         byte k=0;
 
         /*do ptr=(value&(1<<k))==0?
@@ -63,35 +56,48 @@ final public class Cache{
                 (ptr.left =new IntegerNode()):
                 (ptr.right=new IntegerNode());
 
-        return ptr.value==null?ptr.value=Integer.valueOf(value):ptr.value;
+        Integer ret=ptr.value==null?ptr.value=Integer.valueOf(value):ptr.value;
+        rwLock.writeLock().unlock();
+        return ret;
     }
-
+    public  static void  cacheIntegers(int min,int max){
+        if(min<=max){
+            if(max==Integer.MAX_VALUE)
+                getInteger(max--);
+            while(min<=max)
+                getInteger(min++);
+        }
+    }
 //==============================================================================
-
     final private static class LongNode{
         private LongNode left,right;
         private Long value;
         private LongNode(){}
     }
-    private static LongNode Long_root;
-    public  static void Long_malloc (){
-        Long_root=new LongNode();
+    private static LongNode rootLong;
+    public  static void mallocLongs(){
+        rwLock.writeLock().  lock();
+        if(rootLong==null)rootLong=new LongNode();
+        rwLock.writeLock().unlock();
     }
-    private static void Long_free   (LongNode node){
+    private static void   freeLongs(LongNode node){
         if(node==null)return;
         node.value=null;
-        Long_free(node.left );
+        freeLongs(node.left );
         node.left =null;
-        Long_free(node.right);
+        freeLongs(node.right);
         node.right=null;
     }
-    public  static void Long_free   (){
-        Long_free(Long_root);
-        Long_root=null;
+    public  static void   freeLongs(){
+        rwLock.writeLock().  lock();
+        freeLongs(rootLong);
+        rootLong=null;
+        rwLock.writeLock().unlock();
     }
-    public  static Long Long_valueOf(long value){
+    public  static Long    getLong (long value){
         if(-128L<=value&&value<=127L)return Long.valueOf(value);
-        LongNode ptr=Long_root;
+        rwLock.writeLock().  lock();
+        LongNode ptr=rootLong;
         byte k=0;
 
         /*do ptr=(value&(1<<k))==0?
@@ -109,41 +115,48 @@ final public class Cache{
                 (ptr.left =new LongNode()):
                 (ptr.right=new LongNode());
 
-        return ptr.value==null?ptr.value=new Long(value):ptr.value;
+        Long ret=ptr.value==null?ptr.value=new Long(value):ptr.value;
+        rwLock.writeLock().unlock();
+        return ret;
     }
-
-//==============================================================================
-
-    public  static Byte Byte_valueOf(byte value){
-        return Byte.valueOf(value);
+    public  static void  cacheLongs(long min,long max){
+        if(min<=max){
+            if(max==Long.MAX_VALUE)
+                getLong(max--);
+            while(min<=max)
+                getLong(min++);
+        }
     }
-
 //==============================================================================
-
     final private static class ShortNode{
         private ShortNode left,right;
         private Short value;
         private ShortNode(){}
     }
-    private static ShortNode Short_root;
-    public  static void  Short_malloc (){
-        Short_root=new ShortNode();
+    private static ShortNode rootShort;
+    public  static void mallocShorts(){
+        rwLock.writeLock().  lock();
+        if(rootShort==null)rootShort=new ShortNode();
+        rwLock.writeLock().unlock();
     }
-    private static void  Short_free   (ShortNode node){
+    private static void   freeShorts(ShortNode node){
         if(node==null)return;
         node.value=null;
-        Short_free(node.left );
+        freeShorts(node.left );
         node.left =null;
-        Short_free(node.right);
+        freeShorts(node.right);
         node.right=null;
     }
-    public  static void  Short_free   (){
-        Short_free(Short_root);
-        Short_root=null;
+    public  static void   freeShorts(){
+        rwLock.writeLock().  lock();
+        freeShorts(rootShort);
+        rootShort=null;
+        rwLock.writeLock().unlock();
     }
-    public  static Short Short_valueOf(short value){
+    public  static Short   getShort (short value){
         if((short)-128<=value&&value<=(short)127)return Short.valueOf(value);
-        ShortNode ptr=Short_root;
+        rwLock.writeLock().  lock();
+        ShortNode ptr=rootShort;
         byte k=0;
 
         /*do ptr=(value&(1<<k))==0?
@@ -161,9 +174,18 @@ final public class Cache{
                 (ptr.left =new ShortNode()):
                 (ptr.right=new ShortNode());
 
-        return ptr.value==null?ptr.value=new Short(value):ptr.value;
+        Short ret=ptr.value==null?ptr.value=new Short(value):ptr.value;
+        rwLock.writeLock().unlock();
+        return ret;
     }
-
+    public  static void  cacheShorts(short min,short max){
+        if(min<=max){
+            if(max==Short.MAX_VALUE)
+                getShort(max--);
+            while(min<=max)
+                getShort(min++);
+        }
+    }
 //==============================================================================
 
 
@@ -174,16 +196,14 @@ final public class Cache{
 
 
 //==============================================================================
-
-    public  static void malloc(){
-        Short_malloc  ();
-        Integer_malloc();
-        Long_malloc   ();
+    public static void malloc(){
+        mallocShorts  ();
+        mallocIntegers();
+        mallocLongs   ();
     }
-    public  static void free  (){
-        Short_free  ();
-        Integer_free();
-        Long_free   ();
+    public static void free  (){
+        freeShorts  ();
+        freeIntegers();
+        freeLongs   ();
     }
-    private Cache(){}
 }

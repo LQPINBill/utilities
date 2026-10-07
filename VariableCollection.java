@@ -6,8 +6,8 @@ final public class VariableCollection implements Cloneable{
 
     final private ConcurrentHashMap<Integer,String>index_name=new ConcurrentHashMap<>();
     final private ConcurrentHashMap<String ,String>name_value=new ConcurrentHashMap<>();
-    private int variableCount=0;
 
+    private int variableCount=0;
     final private static int MAX_VARIABLE_COUNT=256;
     final private static int MAX_VARIABLE_NAME_LENGTH=256;
 
@@ -58,16 +58,14 @@ final public class VariableCollection implements Cloneable{
         int i=variableName.length();
         if(i==0||MAX_VARIABLE_NAME_LENGTH<i)throw new IllegalArgumentException();
         char c=variableName.charAt(0);
-        if( !(  Character.isLetter(c)
-                ||'_'==c
-                ||'$'==c
-            )
+        if( (!Character.isLetter(c))
+            &&'_'!=c
+            &&'$'!=c
         )throw new IllegalArgumentException();
         while(i>1)
-            if( !(  Character.isLetterOrDigit(c=variableName.charAt(--i))
-                    ||'_'==c
-                    ||'$'==c
-                )
+            if( (!Character.isLetterOrDigit(c=variableName.charAt(--i)))
+                &&'_'!=c
+                &&'$'!=c
             )throw new IllegalArgumentException();
     }
     /**
@@ -428,14 +426,13 @@ final public class VariableCollection implements Cloneable{
     }
 
     /*private static void checkValidityOfStorage(String storage){
-        int l=storage.length(),k=0;
-        while(k<l)
-            switch(storage.charAt(k++)){
+        for(int l=storage.length(),k=0;k<l;++k)
+            switch(storage.charAt(k)){
                 case '"'->throw new IllegalArgumentException();
                 case'\n'->throw new IllegalArgumentException();
                 case'\\'->{
-                    if(k==l)throw new IllegalArgumentException();
-                    switch(storage.charAt(k++)){
+                    if(++k==l)throw new IllegalArgumentException();
+                    switch(storage.charAt(k)){
                         case '"'->{}
                         case 'n'->{}
                         case'\\'->{}
@@ -446,29 +443,28 @@ final public class VariableCollection implements Cloneable{
     }*/
     /*private static String storageTOmemory (String storage){
         char[]value=new char[storage.length()];
-        int i_storage=0,
-            i_value  =0;
         char c;
-        while(i_storage<value.length)
-            switch(c=storage.charAt(i_storage++)){
+        int i=0;
+        for(int k=0;k<value.length;++k,++i)
+            switch(c=storage.charAt(k)){
                 case '"'->throw new IllegalArgumentException();
                 case'\n'->throw new IllegalArgumentException();
                 case'\\'->{
-                    if(i_storage==value.length)throw new IllegalArgumentException();
-                    value[i_value++]=switch(storage.charAt(i_storage++)){
-                        case '"'-> '"';
+                    if(++k==value.length)throw new IllegalArgumentException();
+                    value[i]=switch(c=storage.charAt(k)){
+                        case '"'->  c ;
                         case 'n'->'\n';
-                        case'\\'->'\\';
+                        case'\\'->  c ;
                         default ->throw new IllegalArgumentException();
                     };
                 }
-                default ->value[i_value++]=c;
+                default ->value[i]=c;
             }
-        return new String(value,0,i_value);
+        return new String(value,0,i);
     }*/
     /*private static String  memoryTOstorage(String value  ){
         int l=value.length();
-        StringBuilder storage=new StringBuilder((int)(1.03d*(double)l));
+        StringBuilder storage=new StringBuilder((int)(1.06d*(double)l));
         char c;
         for(int k=0;k<l;++k)
             if('\n'==(c=value.charAt(k)))
@@ -485,29 +481,26 @@ final public class VariableCollection implements Cloneable{
         if(nextLines<0)throw new IllegalArgumentException();
         String nextLine="\";";
         while(nextLines>0){
-            nextLine+='\n';
             --nextLines;
+            nextLine+='\n';
         }
         int[]ls=new int[2];
-        rwLock.readLock().lock();
-        name_value.forEach(
-            (n,v)->{
-                ls[0]+=n.length();
-                ls[1]+=v.length();
-            }
-        );
+        rwLock.readLock().  lock();
+        name_value.forEach((n,v)->{
+            ls[0]+=n.length();
+            ls[1]+=v.length();
+        });
         StringBuilder str=new StringBuilder(
             ls[0]+variableCount*(2+nextLine.length())+
-            (int)(1.03d*(double)ls[1])
+            (int)(1.06d*(double)ls[1])
         );
         String n,v;
-        int v_l,k;
         char c;
+        int l,k;
         while(nextLines<variableCount){
-            str.append(n=index_name.get(Cache.getInteger(nextLines++)));
+            str.append(n=index_name.get(Cache.getInteger(nextLines)));
             str.append("=\"");
-            v_l=(v=name_value.get(n)).length();
-            for(k=0;k<v_l;++k)
+            for(l=(v=name_value.get(n)).length(),k=0;k<l;++k)
                 if('\n'==(c=v.charAt(k)))
                     str.append("\\n");
                 else{
@@ -516,6 +509,7 @@ final public class VariableCollection implements Cloneable{
                     str.append(c);
                 }
             str.append(nextLine);
+            ++nextLines;
         }
         rwLock.readLock().unlock();
         return str.toString();
@@ -540,33 +534,32 @@ final public class VariableCollection implements Cloneable{
         }
         if(c!=';')throw new IllegalArgumentException();
         if(++i!=l)string=string.substring(0,l=i);
-        i=0;
+        int begin=i=0;
+        String name;
+        StringBuilder value;
         rwLock.writeLock().lock();
         String[]recovery=toStrings();
         clear();
         try{do{ while( ' '==(c=string.charAt(i))
                     ||'\n'== c
                 )++i;
-                /*if(
-                    (!Character.isLetter(c))
+                if( (!Character.isLetter(c))
                     &&'_'!=c
                     &&'$'!=c
-                )throw new IllegalArgumentException();*/
-                int name_begin=i;
+                )throw new IllegalArgumentException();
+                begin=i;
                 c=string.charAt(++i);
                 while(  c!=' '&&
                         c!='='&&
                         c!='\n'
-                ){  /*if(
-                        (!Character.isLetterOrDigit(c))
+                ){  if( (!Character.isLetterOrDigit(c))
                         &&'_'!=c
                         &&'$'!=c
-                    )throw new IllegalArgumentException();*/
+                    )throw new IllegalArgumentException();
                     c=string.charAt(++i);
                 }
-                //if(MAX_VARIABLE_NAME_LENGTH<i-name_begin)throw new IllegalArgumentException();
-                String name=string.substring(name_begin,i);
-                add(name);
+                if(MAX_VARIABLE_NAME_LENGTH<i-begin)throw new IllegalArgumentException();
+                name=string.substring(begin,i);
                 while(c==' '
                     ||c=='\n'
                 )c=string.charAt(++i);
@@ -576,17 +569,17 @@ final public class VariableCollection implements Cloneable{
                     c=='\n'
                 );
                 if(c!='"')throw new IllegalArgumentException();
-                StringBuilder value=new StringBuilder(64);
+                value=new StringBuilder(64);
                 while('"'!=(c=string.charAt(++i))){
                     switch(c){
                         case'\n'->throw new IllegalArgumentException();
                         case'\\'->{
                             if(++i==l)throw new IllegalArgumentException();
                             value.append(
-                                switch(string.charAt(i)){
-                                    case '"'-> '"';
+                                switch(c=string.charAt(i)){
+                                    case '"'->  c ;
                                     case 'n'->'\n';
-                                    case'\\'->'\\';
+                                    case'\\'->  c ;
                                     default ->throw new IllegalArgumentException();
                                 }
                             );
@@ -599,6 +592,14 @@ final public class VariableCollection implements Cloneable{
                     c=='\n'
                 );
                 if(c!=';')throw new IllegalArgumentException();
+
+                if(variableCount==MAX_VARIABLE_COUNT)
+                    throw new RuntimeException();
+                if(name_value.putIfAbsent(name,"")!=null)
+                    throw new RuntimeException();
+                index_name.put(Cache.getInteger(variableCount),name);
+                ++variableCount;
+
                 name_value.put(name,value.toString());
             }while(++i<l);
         }catch(Throwable e){
@@ -615,6 +616,6 @@ final public class VariableCollection implements Cloneable{
         setto(string);
     }
     public VariableCollection(byte[] bytes ){
-        setto(bytes );
+        setto(bytes);
     }
 }
