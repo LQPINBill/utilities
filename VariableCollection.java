@@ -58,12 +58,16 @@ final public class VariableCollection implements Cloneable{
         int i=variableName.length();
         if(i==0||MAX_VARIABLE_NAME_LENGTH<i)throw new IllegalArgumentException();
         char c=variableName.charAt(0);
-        if( (!Character.isLetter(c))
+        if( (   !(  ('a'<=c&&c<='z')||('A'<=c&&c<='Z')
+                )
+            )
             &&'_'!=c
             &&'$'!=c
         )throw new IllegalArgumentException();
         while(i>1)
-            if( (!Character.isLetterOrDigit(c=variableName.charAt(--i)))
+            if( (   !(  ('a'<=(c=variableName.charAt(--i))&&c<='z')||('A'<=c&&c<='Z')||('0'<=c&&c<='9')
+                    )
+                )
                 &&'_'!=c
                 &&'$'!=c
             )throw new IllegalArgumentException();
@@ -92,7 +96,7 @@ final public class VariableCollection implements Cloneable{
             rwLock.writeLock().unlock();
             throw e;
         }
-        index_name.put(Cache.getInteger(variableCount),variableName);
+        index_name.put(Integer.valueOf(variableCount),variableName);
         ++variableCount;
         rwLock.writeLock().unlock();
     }
@@ -113,15 +117,15 @@ final public class VariableCollection implements Cloneable{
             rwLock.writeLock().unlock();
             throw e;
         }
-        Integer i=Cache.getInteger(--variableCount);
+        Integer i=Integer.valueOf(--variableCount);
         while(!index_name.get(i).equals(variableName))
-            i=Cache.getInteger(i.intValue()-1);
-        Integer k=Cache.getInteger(i.intValue()+1);
+            i=Integer.valueOf(i.intValue()-1);
+        Integer k=Integer.valueOf(i.intValue()+1);
         while(k.intValue()<=variableCount){
             index_name.put(
                 i,index_name.get(k)
             );
-            k=Cache.getInteger((i=k).intValue()+1);
+            k=Integer.valueOf((i=k).intValue()+1);
         }
         index_name.remove(i);
         rwLock.writeLock().unlock();
@@ -133,24 +137,24 @@ final public class VariableCollection implements Cloneable{
      * {@code variableName}, or{@code -1}if such variable does not exist
      * @throws NullPointerException iff{@code variableName==null}
      */
-    public int      indexOfVariable(String variableName){
+    public Integer  indexOfVariable(String variableName){
         if(variableName==null)throw new NullPointerException();
         rwLock.readLock().  lock();
 
-        int k=variableCount;
-        while(k>0)
-            if(index_name.get(Cache.getInteger(--k)).equals(variableName)){
+        Integer k=Integer.valueOf(variableCount);
+        while(k.intValue()>0)
+            if(index_name.get(k=Integer.valueOf(k.intValue()-1)).equals(variableName)){
                 rwLock.readLock().unlock();
                 return k;
             }
-        /*for(int k=0;k<variableCount;++k)
-            if(index_name.get(Cache.getInteger(k)).equals(variableName)){
+        /*for(Integer k=Integer.valueOf(0);k.intValue()<variableCount;k=Integer.valueOf(k.intValue()+1))
+            if(index_name.get(k).equals(variableName)){
                 rwLock.readLock().unlock();
                 return k;
             }*/
 
         rwLock.readLock().unlock();
-        return-1;
+        return Integer.valueOf(-1);
     }
     /**
      * @param variableName the name of the variable to find
@@ -174,16 +178,16 @@ final public class VariableCollection implements Cloneable{
      * value{@code value}, or{@code -1}if such variable does not exist
      * @throws NullPointerException iff{@code value==null}
      */
-    public int      indexOfValue   (String value       ){
+    public Integer  indexOfValue   (String value       ){
         if(value==null)throw new NullPointerException();
         rwLock.readLock().  lock();
-        for(int k=0;k<variableCount;++k)
-            if(name_value.get(index_name.get(Cache.getInteger(k))).equals(value)){
+        for(Integer k=Integer.valueOf(0);k.intValue()<variableCount;k=Integer.valueOf(k.intValue()+1))
+            if(name_value.get(index_name.get(k)).equals(value)){
                 rwLock.readLock().unlock();
                 return k;
             }
         rwLock.readLock().unlock();
-        return-1;
+        return Integer.valueOf(-1);
     }
     /**
      * @param value the value of the variable to find
@@ -229,7 +233,7 @@ final public class VariableCollection implements Cloneable{
      * {@code index}in this VC
      */
     public String variableAt(int     index){
-        return variableAt(Cache.getInteger(index));
+        return variableAt(Integer.valueOf(index));
     }
     /**
      * @param index the index in this VC of the variable to find
@@ -255,7 +259,7 @@ final public class VariableCollection implements Cloneable{
      * {@code index}in this VC
      */
     public String    valueAt(int     index){
-        return valueAt(Cache.getInteger(index));
+        return valueAt(Integer.valueOf(index));
     }
 
     /**
@@ -299,7 +303,7 @@ final public class VariableCollection implements Cloneable{
         rwLock.readLock().  lock();
         String[]l=new String[variableCount*2];
         for(int k=0;k<variableCount;++k){
-            l[i]=n=index_name.get(Cache.getInteger(k));
+            l[i]=n=index_name.get(Integer.valueOf(k));
             l[++i]=name_value.get(n);
             ++i;
         }
@@ -314,7 +318,7 @@ final public class VariableCollection implements Cloneable{
         name_value.clear();
         variableCount=0;
         while(k<recovery.length){
-            index_name.put(Cache.getInteger(variableCount),n=recovery[k]);
+            index_name.put(Integer.valueOf(variableCount),n=recovery[k]);
             name_value.put(n,recovery[++k]);
             ++k;
             ++variableCount;
@@ -362,7 +366,7 @@ final public class VariableCollection implements Cloneable{
         String[]l=new String[variableCount];
         while(k>0){
             --k;
-            l[k]=index_name.get(Cache.getInteger(k));
+            l[k]=index_name.get(Integer.valueOf(k));
         }
         rwLock.readLock().unlock();
         return l;
@@ -374,7 +378,7 @@ final public class VariableCollection implements Cloneable{
         while(k>0){
             --k;
             l[k]=name_value.get(
-                index_name.get(Cache.getInteger(k))
+                index_name.get(Integer.valueOf(k))
             );
         }
         rwLock.readLock().unlock();
@@ -413,17 +417,27 @@ final public class VariableCollection implements Cloneable{
         }
     }
 
-    @Override public int hashCode(){
+    /*public boolean equals(VariableCollection y){
+        if(y==null)return false;
+        String[]
+            X=  toStrings(),
+            Y=y.toStrings();
+        return true;
+    }*/
+    /*public boolean equals(Object obj){
+        return obj instanceof VariableCollection y?equals(y):false;
+    }*/
+    /*@Override public int hashCode(){
         int h=0,k=0;
         String n;
         rwLock.readLock().  lock();
         while(k<variableCount){
-            h+=(n=index_name.get(Cache.getInteger(k))).hashCode();
+            h+=(n=index_name.get(Integer.valueOf(k))).hashCode();
             h*=(++k)*name_value.get(n).hashCode();
         }
         rwLock.readLock().unlock();
         return h;
-    }
+    }*/
 
     /*private static void checkValidityOfStorage(String storage){
         for(int l=storage.length(),k=0;k<l;++k)
@@ -498,7 +512,7 @@ final public class VariableCollection implements Cloneable{
         char c;
         int l,k;
         while(nextLines<variableCount){
-            str.append(n=index_name.get(Cache.getInteger(nextLines)));
+            str.append(n=index_name.get(Integer.valueOf(nextLines)));
             str.append("=\"");
             for(l=(v=name_value.get(n)).length(),k=0;k<l;++k)
                 if('\n'==(c=v.charAt(k)))
@@ -543,7 +557,9 @@ final public class VariableCollection implements Cloneable{
         try{do{ while( ' '==(c=string.charAt(i))
                     ||'\n'== c
                 )++i;
-                if( (!Character.isLetter(c))
+                if( (   !(  ('a'<=c&&c<='z')||('A'<=c&&c<='Z')
+                        )
+                    )
                     &&'_'!=c
                     &&'$'!=c
                 )throw new IllegalArgumentException();
@@ -552,7 +568,9 @@ final public class VariableCollection implements Cloneable{
                 while(  c!=' '&&
                         c!='='&&
                         c!='\n'
-                ){  if( (!Character.isLetterOrDigit(c))
+                ){  if( (   !(  ('a'<=c&&c<='z')||('A'<=c&&c<='Z')||('0'<=c&&c<='9')
+                            )
+                        )
                         &&'_'!=c
                         &&'$'!=c
                     )throw new IllegalArgumentException();
@@ -597,7 +615,7 @@ final public class VariableCollection implements Cloneable{
                     throw new RuntimeException();
                 if(name_value.putIfAbsent(name,"")!=null)
                     throw new RuntimeException();
-                index_name.put(Cache.getInteger(variableCount),name);
+                index_name.put(Integer.valueOf(variableCount),name);
                 ++variableCount;
 
                 name_value.put(name,value.toString());
