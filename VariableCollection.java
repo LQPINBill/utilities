@@ -1,33 +1,41 @@
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-final public class VariableCollection implements Cloneable{
+public class VariableCollection implements Cloneable{
 
-    final private ConcurrentHashMap<Integer,String>index_name=new ConcurrentHashMap<>();
-    final private ConcurrentHashMap<String ,String>name_value=new ConcurrentHashMap<>();
-
-    private int variableCount=0;
-    final private static int MAX_VARIABLE_COUNT=256;
-    final private static int MAX_VARIABLE_NAME_LENGTH=256;
+    final private HashMap<Integer,String>index_name=new HashMap<>();
+    final private HashMap<String ,String>name_value=new HashMap<>();
 
     final private ReentrantReadWriteLock rwLock=new ReentrantReadWriteLock(false);
 
-    /**
-     * create a new VC with no variable
-     */
+    final private static int
+        MAX_VARIABLE_COUNT      =1<<16,
+        MAX_VARIABLE_NAME_LENGTH=1<<16;
+
+    static{
+        if( MAX_VARIABLE_COUNT      <0||(1<<30)-1<MAX_VARIABLE_COUNT        ||
+            MAX_VARIABLE_NAME_LENGTH<1|| 1<<16   <MAX_VARIABLE_NAME_LENGTH
+        )throw new IllegalArgumentException();
+    }
+
     public VariableCollection(){}
 
     public int variableCount(){
         rwLock.readLock().  lock();
-        int t=variableCount;
+
+        int t=index_name.size();
+        //int t=name_value.size();
+
         rwLock.readLock().unlock();
         return t;
     }
     public boolean isEmpty(){
-        //return variableCount()==0;
         rwLock.readLock().  lock();
-        boolean t=variableCount==0;
+
+        boolean t=index_name.isEmpty();
+        //boolena t=name_value.isEmpty();
+
         rwLock.readLock().unlock();
         return t;
     }
@@ -35,93 +43,75 @@ final public class VariableCollection implements Cloneable{
         rwLock.writeLock().  lock();
         index_name.clear();
         name_value.clear();
-        variableCount=0;
         rwLock.writeLock().unlock();
     }
 
-    /**
-     * does nothing iff{@code variableName}is a valid variable name, else throw
-     * {@code NullPointerException}or{@code IllegalArgumentException}
-     * 
-     * a String is a valid variable name, iff the String is not{@code null}and
-     * does not equal to the empty String{@code ""}, and its every char is a
-     * digit(0 to 9), letter(a to z, A to Z), '_' or '$', and begins with a non-
-     * digit char, and the length of String is no greater than the maximum 
-     * variable name length allowed
-     * 
-     * @param variableName the variable name to check
-     * @throws NullPointerException iff{@code variableName==null}
-     * @throws IllegalArgumentException iff{@code variableName}is not a valid
-     * variable name
-     */
     private static void checkValidityOfVariableName(String variableName){
         int i=variableName.length();
         if(i==0||MAX_VARIABLE_NAME_LENGTH<i)throw new IllegalArgumentException();
         char c=variableName.charAt(0);
-        if( (   !(  ('a'<=c&&c<='z')||('A'<=c&&c<='Z')
+        if( (   !(  ('a'<=c&&c<='z')||
+                    ('A'<=c&&c<='Z')
                 )
             )
-            &&'_'!=c
-            &&'$'!=c
+            &&c!='_'
+            &&c!='$'
         )throw new IllegalArgumentException();
-        while(i>1)
-            if( (   !(  ('a'<=(c=variableName.charAt(--i))&&c<='z')||('A'<=c&&c<='Z')||('0'<=c&&c<='9')
+        while(i>1){
+            c=variableName.charAt(--i);
+            if( (   !(  ('a'<=c&&c<='z')||
+                        ('A'<=c&&c<='Z')||
+                        ('0'<=c&&c<='9')
                     )
                 )
-                &&'_'!=c
-                &&'$'!=c
+                &&c!='_'
+                &&c!='$'
             )throw new IllegalArgumentException();
-    }
-    /**
-     * declare a new variable at the tail of this VC with name
-     * {@code variableName}and default initial value{@code ""}
-     * 
-     * @param variableName the name of the new variable to declare and add
-     * @throws NullPointerException iff{@code variableName==null}
-     * @throws IllegalArgumentException iff{@code variableName}is not a valid
-     * variable name
-     * @throws RuntimeException iff this VC already contained a variable with
-     * name{@code variableName}, or this VC's variable count is the maximum 
-     * variable count allowed
-     */
-    public void add   (String variableName){
-        checkValidityOfVariableName(variableName);
-        rwLock.writeLock().  lock();
-        try{
-            if(variableCount==MAX_VARIABLE_COUNT)
-                throw new RuntimeException();
-            if(name_value.putIfAbsent(variableName,"")!=null)
-                throw new RuntimeException();
-        }catch(Throwable e){
-            rwLock.writeLock().unlock();
-            throw e;
         }
-        index_name.put(Integer.valueOf(variableCount),variableName);
-        ++variableCount;
+    }
+    public void add   (String variableName,String value){
+        if(value==null)throw new NullPointerException();
+        checkValidityOfVariableName(variableName);
+        rwLock.writeLock().lock();
+
+        //int variableCountOld=variableCount();
+        int variableCountOld=index_name.size();
+
+        if( variableCountOld==MAX_VARIABLE_COUNT||
+            name_value.putIfAbsent(variableName,value)!=null
+        ){  rwLock.writeLock().unlock();
+            throw new RuntimeException();
+        }
+        index_name.put(Integer.valueOf(variableCountOld),variableName);
         rwLock.writeLock().unlock();
     }
-    /**
-     * remove the variable of this VC with name{@code variableName}
-     * 
-     * @param variableName the name of the variable to remove
-     * @throws NullPointerException iff{@code variableName==null}
-     * @throws RuntimeException iff this VC does not contain a variable with
-     * name{@code variableName}
-     */
-    public void remove(String variableName){
-        rwLock.writeLock().  lock();
-        try{
-            if(name_value.remove(variableName)==null)
-                throw new RuntimeException();
-        }catch(Throwable e){
-            rwLock.writeLock().unlock();
-            throw e;
+    public void add   (String variableName             ){
+
+        //add(variableName,"");
+        checkValidityOfVariableName(variableName);
+        rwLock.writeLock().lock();
+        int variableCountOld=index_name.size();
+        if( variableCountOld==MAX_VARIABLE_COUNT||
+            name_value.putIfAbsent(variableName,"")!=null
+        ){  rwLock.writeLock().unlock();
+            throw new RuntimeException();
         }
-        Integer i=Integer.valueOf(--variableCount);
+        index_name.put(Integer.valueOf(variableCountOld),variableName);
+        rwLock.writeLock().unlock();
+
+    }
+    public void remove(String variableName             ){
+        rwLock.writeLock().lock();
+        if(name_value.remove(variableName)==null){
+            rwLock.writeLock().unlock();
+            throw new RuntimeException();
+        }
+        int variableCountNew=name_value.size();
+        Integer i=Integer.valueOf(variableCountNew);
         while(!index_name.get(i).equals(variableName))
             i=Integer.valueOf(i.intValue()-1);
         Integer k=Integer.valueOf(i.intValue()+1);
-        while(k.intValue()<=variableCount){
+        while(k.intValue()<=variableCountNew){
             index_name.put(
                 i,index_name.get(k)
             );
@@ -131,290 +121,256 @@ final public class VariableCollection implements Cloneable{
         rwLock.writeLock().unlock();
     }
 
-    /**
-     * @param variableName the name of the variable to find
-     * @return the index in this VC of the variable with name
-     * {@code variableName}, or{@code -1}if such variable does not exist
-     * @throws NullPointerException iff{@code variableName==null}
-     */
-    public Integer  indexOfVariable(String variableName){
+    public boolean containsVariable        (String variableName){
         if(variableName==null)throw new NullPointerException();
         rwLock.readLock().  lock();
+        boolean t=name_value.containsKey(variableName);
+        rwLock.readLock().unlock();
+        return t;
+    }
+    public Integer  indexOfVariable_Integer(String variableName){
+        if(variableName==null)throw new NullPointerException();
+        rwLock.readLock().lock();
+        int l=
 
-        Integer k=Integer.valueOf(variableCount);
-        while(k.intValue()>0)
-            if(index_name.get(k=Integer.valueOf(k.intValue()-1)).equals(variableName)){
+            //variableCount()
+            index_name.size()
+
+        ;
+        for(Integer k=Integer.valueOf(0);
+            k.intValue()<l;
+            k=Integer.valueOf(k.intValue()+1)
+        )if(index_name.get(k).equals(variableName)){
                 rwLock.readLock().unlock();
                 return k;
             }
-        /*for(Integer k=Integer.valueOf(0);k.intValue()<variableCount;k=Integer.valueOf(k.intValue()+1))
-            if(index_name.get(k).equals(variableName)){
-                rwLock.readLock().unlock();
-                return k;
-            }*/
-
         rwLock.readLock().unlock();
         return Integer.valueOf(-1);
     }
-    /**
-     * @param variableName the name of the variable to find
-     * @return {@code true}iff this VC contains a variable with name
-     * {@code variableName}
-     * @throws NullPointerException iff{@code variableName==null}
-     */
-    public boolean containsVariable(String variableName){
-        boolean t;
+    public int      indexOfVariable_int    (String variableName){
+        if(variableName==null)throw new NullPointerException();
         rwLock.readLock().lock();
-        try{
-            t=name_value.get(variableName)!=null;
-        }finally{
-            rwLock.readLock().unlock();
-        }
-        return t;
+        for(int k=0,l=
+
+                //variableCount()
+                index_name.size()
+
+            ;
+            k<l;
+            ++k
+        )if(index_name.get(Integer.valueOf(k)).equals(variableName)){
+                rwLock.readLock().unlock();
+                return k;
+            }
+        rwLock.readLock().unlock();
+        return-1;
     }
-    /**
-     * @param value the value of the variable to find
-     * @return the index in this VC of the first occurence of a variable with
-     * value{@code value}, or{@code -1}if such variable does not exist
-     * @throws NullPointerException iff{@code value==null}
-     */
-    public Integer  indexOfValue   (String value       ){
+    public boolean containsValue           (String value       ){
         if(value==null)throw new NullPointerException();
         rwLock.readLock().  lock();
-        for(Integer k=Integer.valueOf(0);k.intValue()<variableCount;k=Integer.valueOf(k.intValue()+1))
-            if(name_value.get(index_name.get(k)).equals(value)){
+        boolean t=name_value.containsValue(value);
+        rwLock.readLock().unlock();
+        return t;
+    }
+    public Integer  indexOfValue_Integer   (String value       ){
+        if(value==null)throw new NullPointerException();
+        rwLock.readLock().lock();
+        int l=
+
+            //variableCount()
+            index_name.size()
+
+        ;
+        for(Integer k=Integer.valueOf(0);
+            k.intValue()<l;
+            k=Integer.valueOf(k.intValue()+1)
+        )if(name_value.get(index_name.get(k)).equals(value)){
                 rwLock.readLock().unlock();
                 return k;
             }
         rwLock.readLock().unlock();
         return Integer.valueOf(-1);
     }
-    /**
-     * @param value the value of the variable to find
-     * @return {@code true}iff this VC contains a variable with value
-     * {@code value}
-     * @throws NullPointerException iff{@code value==null}
-     */
-    public boolean containsValue   (String value       ){
-        boolean t;
+    public int      indexOfValue_int       (String value       ){
+        if(value==null)throw new NullPointerException();
         rwLock.readLock().lock();
-        try{
-            t=name_value.containsValue(value);
-        }finally{
-            rwLock.readLock().unlock();
-        }
-        return t;
-    }
+        for(int k=0,l=
 
-    /**
-     * @param index the index in this VC of the variable to find
-     * @return the name of the variable with index{@code index}in this VC
-     * @throws NullPointerException iff{@code index==null}
-     * @throws IndexOutOfBoundsException iff there exists no variable with index
-     * {@code index}in this VC
-     */
-    public String variableAt(Integer index){
-        String t;
-        rwLock.readLock().lock();
-        try{
-            if((t=index_name.get(index))==null)
-                throw new IndexOutOfBoundsException(
-                    "index "+index.intValue()+" is not in interval [0,"+variableCount+')'
-                );
-        }finally{
-            rwLock.readLock().unlock();
-        }
-        return t;
-    }
-    /**
-     * @param index the index in this VC of the variable to find
-     * @return the name of the variable with index{@code index}in this VC
-     * @throws IndexOutOfBoundsException iff there exists no variable with index
-     * {@code index}in this VC
-     */
-    public String variableAt(int     index){
-        return variableAt(Integer.valueOf(index));
-    }
-    /**
-     * @param index the index in this VC of the variable to find
-     * @return the value of the variable with index{@code index}in this VC
-     * @throws NullPointerException iff{@code index==null}
-     * @throws IndexOutOfBoundsException iff there exists no variable with index
-     * {@code index}in this VC
-     */
-    public String    valueAt(Integer index){
-        String t;
-        rwLock.readLock().lock();
-        try{
-            t=name_value.get(variableAt(index));
-        }finally{
-            rwLock.readLock().unlock();
-        }
-        return t;
-    }
-    /**
-     * @param index the index in this VC of the variable to find
-     * @return the value of the variable with index{@code index}in this VC
-     * @throws IndexOutOfBoundsException iff there exists no variable with index
-     * {@code index}in this VC
-     */
-    public String    valueAt(int     index){
-        return valueAt(Integer.valueOf(index));
-    }
+                //variableCount()
+                index_name.size()
 
-    /**
-     * set the variable with name{@code variableName}of this VC to{@code value}
-     * @param variableName the name of the variable to set
-     * @param value the value set to the variable to set
-     * @throws NullPointerException iff{@code variableName==null||value==null}
-     * @throws RuntimeException iff this VC does not contain a variable with
-     * name{@code variableName}
-     */
-    public void   set(String variableName,String value){
-        rwLock.writeLock().lock();
-        try{
-            if(name_value.replace(variableName,value)==null)
-                throw new RuntimeException();
-        }finally{
-            rwLock.writeLock().unlock();
-        }
-    }
-    /**
-     * @param variableName the name of the variable to read
-     * @return the value of the variable to read
-     * @throws NullPointerException iff{@code variableName==null}
-     * @throws RuntimeException iff this VC does not contain a variable with
-     * name{@code variableName}
-     */
-    public String get(String variableName             ){
-        String t;
-        rwLock.readLock().lock();
-        try{
-            if((t=name_value.get(variableName))==null)throw new RuntimeException();
-        }finally{
-            rwLock.readLock().unlock();
-        }
-        return t;
-    }
-
-    public String[]toStrings(){
-        int i=0;
-        String n;
-        rwLock.readLock().  lock();
-        String[]l=new String[variableCount*2];
-        for(int k=0;k<variableCount;++k){
-            l[i]=n=index_name.get(Integer.valueOf(k));
-            l[++i]=name_value.get(n);
-            ++i;
-        }
+            ;
+            k<l;
+            ++k
+        )if(name_value.get(index_name.get(Integer.valueOf(k))).equals(value)){
+                rwLock.readLock().unlock();
+                return k;
+            }
         rwLock.readLock().unlock();
-        return l;
+        return-1;
     }
-    private void recover(String[]recovery){
-        int k=0;
-        String n;
-        rwLock.writeLock().  lock();
-        index_name.clear();
-        name_value.clear();
-        variableCount=0;
-        while(k<recovery.length){
-            index_name.put(Integer.valueOf(variableCount),n=recovery[k]);
-            name_value.put(n,recovery[++k]);
-            ++k;
-            ++variableCount;
+
+    public String variableAt(Integer index){
+        rwLock.readLock().  lock();
+        String t=index_name.get(index);
+        rwLock.readLock().unlock();
+        if(t==null)throw new RuntimeException();
+        return t;
+    }
+    public String variableAt(int     index){
+
+        //return variableAt(Integer.valueOf(index));
+        rwLock.readLock().  lock();
+        String t=index_name.get(Integer.valueOf(index));
+        rwLock.readLock().unlock();
+        if(t==null)throw new IndexOutOfBoundsException();
+        return t;
+
+    }
+    public String    valueAt(Integer index){
+        rwLock.readLock().lock();
+
+        /*try{return name_value.get(variableAt(index));
+        }finally{rwLock.readLock().unlock();}*/
+        String t=index_name.get(index);
+        if(t==null){
+            rwLock.readLock().unlock();
+            throw new RuntimeException();
+        }
+        t=name_value.get(t);
+        rwLock.readLock().unlock();
+        return t;
+
+    }
+    public String    valueAt(int     index){
+
+        //return valueAt(Integer.valueOf(index));
+        rwLock.readLock().lock();
+        String t=index_name.get(Integer.valueOf(index));
+        if(t==null){
+            rwLock.readLock().unlock();
+            throw new IndexOutOfBoundsException();
+        }
+        t=name_value.get(t);
+        rwLock.readLock().unlock();
+        return t;
+
+    }
+
+    public void   set(String variableName,String value){
+        if(value==null)throw new NullPointerException();
+        rwLock.writeLock().lock();
+        if(name_value.replace(variableName,value)==null){
+            rwLock.writeLock().unlock();
+            throw new RuntimeException();
         }
         rwLock.writeLock().unlock();
     }
-    public void setto        (String[]strings){
-        int k=0;
-        String n;
-        rwLock.writeLock().lock();
-        String[]recovery=toStrings();
-        clear();
-        try{
-            while(k<strings.length){
-                add(n=strings[k]);
-                name_value.put(n,strings[++k]);
-                ++k;
-            }
-        }catch(Throwable e){
-            recover(recovery);
-            throw e;
-        }finally{
-            rwLock.writeLock().unlock();
-        }
-    }
-    public VariableCollection(String[]strings){
-        //setto(strings);
-        int k=0;
-        String n;
-        try{
-            while(k<strings.length){
-                add(n=strings[k]);
-                name_value.put(n,strings[++k]);
-                ++k;
-            }
-        }catch(Throwable e){
-            clear();
-            throw e;
-        }
+    public String get(String variableName             ){
+        rwLock.readLock().  lock();
+        String t=name_value.get(variableName);
+        rwLock.readLock().unlock();
+        if(t==null)throw new RuntimeException();
+        return t;
     }
 
-    public String[]structure(){
+    public String[]toStrings (){
         rwLock.readLock().  lock();
-        int k=variableCount;
-        String[]l=new String[variableCount];
+        int k=
+
+            //variableCount()
+            index_name.size()
+
+        ,i=k<<1;
+        String[]l=new String[i];
         while(k>0){
-            --k;
-            l[k]=index_name.get(Integer.valueOf(k));
+            String n=
+            l[--i]=index_name.get(Integer.valueOf(--k));
+            l[--i]=name_value.get(n);
         }
         rwLock.readLock().unlock();
         return l;
     }
-    public String[]cartesian(){
-        rwLock.readLock().  lock();
-        int k=variableCount;
-        String[]l=new String[variableCount];
+    private void recover     (String[] strings){
+        int k=strings.length;
+        rwLock.writeLock().  lock();
+
+        //clear();
+        index_name.clear();
+        name_value.clear();
+
         while(k>0){
-            --k;
-            l[k]=name_value.get(
-                index_name.get(Integer.valueOf(k))
-            );
+            String n=strings[--k];
+            index_name.put(Integer.valueOf(k>>1),n);
+            name_value.put(n,strings[--k]);
         }
-        rwLock.readLock().unlock();
-        return l;
+        rwLock.writeLock().unlock();
     }
-    public void setto        (String[]structure,String[]cartesian){
-        if(structure.length!=cartesian.length)throw new RuntimeException();
-        String n;
+    public  void setto       (String...strings){
+
+        /*rwLock.writeLock().lock();
+        String[]backup=toStrings();
+
+        //clear();
+        index_name.clear();
+        name_value.clear();
+
+        try{for(int k=0;k<strings.length;k+=2)add(strings[k+1],strings[k]);
+        }catch(Throwable e){
+            recover(backup);
+            throw e;
+        }finally{
+            rwLock.writeLock().unlock();
+        }*/
+        int k=strings.length;
+        if((k&1)==1||MAX_VARIABLE_COUNT<<1<k)
+            throw new IllegalArgumentException();
         rwLock.writeLock().lock();
-        String[]recovery=toStrings();
-        clear();
-        try{
-            for(int k=0;k<structure.length;++k){
-                add(n=structure[k]);
-                name_value.put(n,cartesian[k]);
+        String[]backup=toStrings();
+        index_name.clear();
+        name_value.clear();
+        try{while(k>0){
+                String n=strings[--k],v=strings[--k];
+                if(v==null)throw new NullPointerException();
+                checkValidityOfVariableName(n);
+                if(name_value.putIfAbsent(n,v)!=null)
+                    throw new IllegalArgumentException();
+                index_name.put(Integer.valueOf(k>>1),n);
             }
         }catch(Throwable e){
-            recover(recovery);
+            recover(backup);
             throw e;
         }finally{
             rwLock.writeLock().unlock();
         }
+
     }
-    public VariableCollection(String[]structure,String[]cartesian){
-        //setto(structure,cartesian);
-        if(structure.length!=cartesian.length)throw new RuntimeException();
-        String n;
-        try{
-            for(int k=0;k<structure.length;++k){
-                add(n=structure[k]);
-                name_value.put(n,cartesian[k]);
+    public VariableCollection(String...strings){
+
+        //setto(strings);
+        int k=strings.length;
+        if((k&1)==1||MAX_VARIABLE_COUNT<<1<k)
+            throw new IllegalArgumentException();
+        rwLock.writeLock().lock();
+        try{while(k>0){
+                String n=strings[--k],v=strings[--k];
+                if(v==null)throw new NullPointerException();
+                checkValidityOfVariableName(n);
+                if(name_value.putIfAbsent(n,v)!=null)
+                    throw new IllegalArgumentException();
+                index_name.put(Integer.valueOf(k>>1),n);
             }
         }catch(Throwable e){
-            clear();
+
+            //clear();
+            index_name.clear();
+            name_value.clear();
+
             throw e;
+        }finally{
+            rwLock.writeLock().unlock();
         }
+
     }
 
     /*public boolean equals(VariableCollection y){
@@ -491,8 +447,8 @@ final public class VariableCollection implements Cloneable{
         return storage.toString();
     }*/
 
-    private String toString(int nextLines){
-        if(nextLines<0)throw new IllegalArgumentException();
+    public String toString   (int nextLines){
+        if(nextLines<0||16<nextLines)throw new IllegalArgumentException();
         String nextLine="\";";
         while(nextLines>0){
             --nextLines;
@@ -504,6 +460,7 @@ final public class VariableCollection implements Cloneable{
             ls[0]+=n.length();
             ls[1]+=v.length();
         });
+        int variableCount=variableCount();
         StringBuilder str=new StringBuilder(
             ls[0]+variableCount*(2+nextLine.length())+
             (int)(1.06d*(double)ls[1])
@@ -529,10 +486,10 @@ final public class VariableCollection implements Cloneable{
         return str.toString();
     }
     @Override
-    public String toString(){
+    public String toString   (){
         return toString(1);
     }
-    public byte[] toBytes (){
+    public byte[] toBytes    (){
         return toString(0).getBytes(StandardCharsets.UTF_8);
     }
     public void setto        (String string){
@@ -543,41 +500,50 @@ final public class VariableCollection implements Cloneable{
             allEmpty=' '==(c=string.charAt(--i))
                 ||  '\n'== c;
         if(allEmpty){
-            clear();
+
+            //clear();
+            index_name.clear();
+            name_value.clear();
+
             return;
         }
         if(c!=';')throw new IllegalArgumentException();
         if(++i!=l)string=string.substring(0,l=i);
-        int begin=i=0;
-        String name;
-        StringBuilder value;
+        i=0;
         rwLock.writeLock().lock();
-        String[]recovery=toStrings();
-        clear();
+        String[]backup=toStrings();
+
+        //clear();
+        index_name.clear();
+        name_value.clear();
+
         try{do{ while( ' '==(c=string.charAt(i))
                     ||'\n'== c
                 )++i;
-                if( (   !(  ('a'<=c&&c<='z')||('A'<=c&&c<='Z')
+                if( (   !(  ('a'<=c&&c<='z')||
+                            ('A'<=c&&c<='Z')
                         )
                     )
-                    &&'_'!=c
-                    &&'$'!=c
+                    &&c!='_'
+                    &&c!='$'
                 )throw new IllegalArgumentException();
-                begin=i;
+                int begin=i;
                 c=string.charAt(++i);
                 while(  c!=' '&&
                         c!='='&&
                         c!='\n'
-                ){  if( (   !(  ('a'<=c&&c<='z')||('A'<=c&&c<='Z')||('0'<=c&&c<='9')
+                ){  if( (   !(  ('a'<=c&&c<='z')||
+                                ('A'<=c&&c<='Z')||
+                                ('0'<=c&&c<='9')
                             )
                         )
-                        &&'_'!=c
-                        &&'$'!=c
+                        &&c!='_'
+                        &&c!='$'
                     )throw new IllegalArgumentException();
                     c=string.charAt(++i);
                 }
                 if(MAX_VARIABLE_NAME_LENGTH<i-begin)throw new IllegalArgumentException();
-                name=string.substring(begin,i);
+                String n=string.substring(begin,i);
                 while(c==' '
                     ||c=='\n'
                 )c=string.charAt(++i);
@@ -587,13 +553,13 @@ final public class VariableCollection implements Cloneable{
                     c=='\n'
                 );
                 if(c!='"')throw new IllegalArgumentException();
-                value=new StringBuilder(64);
-                while('"'!=(c=string.charAt(++i))){
+                StringBuilder v=new StringBuilder(64);
+                while('"'!=(c=string.charAt(++i)))
                     switch(c){
                         case'\n'->throw new IllegalArgumentException();
                         case'\\'->{
                             if(++i==l)throw new IllegalArgumentException();
-                            value.append(
+                            v.append(
                                 switch(c=string.charAt(i)){
                                     case '"'->  c ;
                                     case 'n'->'\n';
@@ -602,26 +568,19 @@ final public class VariableCollection implements Cloneable{
                                 }
                             );
                         }
-                        default ->value.append(c);
+                        default ->v.append(c);
                     }
-                }
                 do c=string.charAt(++i);while(
                     c==' '||
                     c=='\n'
                 );
                 if(c!=';')throw new IllegalArgumentException();
 
-                if(variableCount==MAX_VARIABLE_COUNT)
-                    throw new RuntimeException();
-                if(name_value.putIfAbsent(name,"")!=null)
-                    throw new RuntimeException();
-                index_name.put(Integer.valueOf(variableCount),name);
-                ++variableCount;
+                add(n,v.toString());
 
-                name_value.put(name,value.toString());
             }while(++i<l);
         }catch(Throwable e){
-            recover(recovery);
+            recover(backup);
             throw e;
         }finally{
             rwLock.writeLock().unlock();
@@ -634,6 +593,9 @@ final public class VariableCollection implements Cloneable{
         setto(string);
     }
     public VariableCollection(byte[] bytes ){
-        setto(bytes);
+
+        //setto(bytes);
+        setto(new String(bytes,StandardCharsets.UTF_8));
+
     }
 }
