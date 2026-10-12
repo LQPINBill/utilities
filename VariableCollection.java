@@ -2,7 +2,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class VariableCollection{
+final public class VariableCollection{
 
     /* 
      * 
@@ -92,6 +92,10 @@ public class VariableCollection{
 
     public VariableCollection(){}
 
+    public long creationTime(){
+        return creationTime;
+    }
+
     /* 
      * 
      * 以下三个方法中，HashMap.size(), HashMap.isEmpty(), HashMap.clear()皆不应抛出异常，可手动管理锁。
@@ -156,10 +160,7 @@ public class VariableCollection{
      * {@code null}and is not a valid variable name
      */
     private static void checkValidityOfVariableName(String variableName){
-
-        // 若参数是null，这会自动抛出NPE
         int i=variableName.length();
-
         if(i==0||MAX_VARIABLE_NAME_LENGTH<i)throw new IllegalArgumentException();
         char c=variableName.charAt(0);
         if( (   !(  ('a'<=c&&c<='z')||
@@ -443,11 +444,6 @@ public class VariableCollection{
     public String variableAt(int     index){
 
         //return variableAt(Integer.valueOf(index));
-        /* 
-         * 
-         * 代码全部来自variableAt(Integer)，但这里的index一定不是null，抛出异常只可能是数组越界导致的，所以可以把复制过来
-         * 的代码的RuntimeException换成IndexOutOfBoundsException
-         */
         rwLock.readLock().  lock();
         String t=index_name.get(Integer.valueOf(index));
         rwLock.readLock().unlock();
@@ -537,7 +533,7 @@ public class VariableCollection{
         rwLock.readLock().unlock();
         return l;
     }
-    private void recover(String[]backup){
+    private void recover     (String[] backup ){
         int k=backup.length;
         rwLock.writeLock().  lock();
 
@@ -549,12 +545,16 @@ public class VariableCollection{
             String
                 v=backup[--k],
                 n=backup[--k];
+
             index_name.put(Integer.valueOf(k>>1),n);
             name_value.put(n,v);
+            /*name_value.put(n,v);
+            index_name.put(Integer.valueOf(k>>1),n);*/
+
         }
         rwLock.writeLock().unlock();
     }
-    public void setto        (String...strings){
+    public  void setto       (String...strings){
 
         /*rwLock.writeLock().lock();
         String[]backup=toStrings();
@@ -562,17 +562,15 @@ public class VariableCollection{
         try{for(int k=0;k!=strings.length;k+=2)add(strings[k],strings[k+1]);
         }catch(Throwable e){
             recover(backup);
-            throw e;
-        }finally{
-            rwLock.writeLock().unlock();
-        }*/
+            throw new IllegalArgumentException();
+        }finally{rwLock.writeLock().unlock();}*/
         int k=strings.length;
         if((k&1)==1||MAX_VARIABLE_COUNT<k>>1)throw new IllegalArgumentException();
         rwLock.writeLock().lock();
         String[]backup=toStrings();
         index_name.clear();
         name_value.clear();
-        try{while(k>0){
+        try{while(k!=0){
                 String
                     v=strings[--k],
                     n=strings[--k];
@@ -584,10 +582,8 @@ public class VariableCollection{
             }
         }catch(Throwable e){
             recover(backup);
-            throw e;
-        }finally{
-            rwLock.writeLock().unlock();
-        }
+            throw new IllegalArgumentException();
+        }finally{rwLock.writeLock().unlock();}
 
     }
     public VariableCollection(String...strings){
@@ -595,9 +591,7 @@ public class VariableCollection{
         //setto(strings);
         int k=strings.length;
         if((k&1)==1||MAX_VARIABLE_COUNT<k>>1)throw new IllegalArgumentException();
-        index_name.clear();
-        name_value.clear();
-        try{while(k>0){
+        try{while(k!=0){
                 String
                     v=strings[--k],
                     n=strings[--k];
@@ -613,7 +607,7 @@ public class VariableCollection{
             index_name.clear();
             name_value.clear();
 
-            throw e;
+            throw new IllegalArgumentException();
         }
 
     }
@@ -623,6 +617,7 @@ public class VariableCollection{
         String[]
             X=  toStrings(),
             Y=y.toStrings();
+
         return true;
     }*/
     /*public boolean equals(Object obj){
@@ -678,8 +673,8 @@ public class VariableCollection{
         return new String(value,0,i);
     }*/
     /*private static String  memoryTOstorage(String value  ){
-        int l=value.length();
-        StringBuilder storage=new StringBuilder((int)(1.06d*(double)l));
+        int l=value.length(),t=(int)(1.06d*(double)l);
+        StringBuilder storage=new StringBuilder(t<0?1<<28:t);
         char c;
         for(int k=0;k<l;++k)
             if('\n'==(c=value.charAt(k)))
@@ -692,7 +687,7 @@ public class VariableCollection{
         return storage.toString();
     }*/
 
-    public String toString   (int nextLines){
+    private String toString  (int nextLines){
         if(nextLines<0)throw new IllegalArgumentException();
         String nextLine="\";";
         while(nextLines>0){
@@ -705,11 +700,10 @@ public class VariableCollection{
             ls[0]+=n.length();
             ls[1]+=v.length();
         });
-        int variableCount=variableCount();
-        StringBuilder str=new StringBuilder(
-            ls[0]+variableCount*(2+nextLine.length())+
-            (int)(1.06d*(double)ls[1])
-        );
+        int variableCount=variableCount(),
+            t=  ls[0]+variableCount*(2+nextLine.length())+
+                (int)(1.06d*(double)ls[1]);
+        StringBuilder str=new StringBuilder(t<0?1<<28:t);
         /* 
          * 
          * 前面保证了nextLines一定从非负的值开始递减，因此nextLines在这个方法刚开始的while循环结束后一定是0，之后没有写入过，
@@ -738,10 +732,10 @@ public class VariableCollection{
         return str.toString();
     }
     @Override
-    public String toString   (){
+    public  String toString  (){
         return toString(1);
     }
-    public byte[] toBytes    (){
+    public  byte[] toBytes   (){
         return toString(0).getBytes(StandardCharsets.UTF_8);
     }
     public void setto        (String string){
@@ -883,10 +877,8 @@ public class VariableCollection{
             }while(++i<l);
         }catch(Throwable e){
             recover(backup);
-            throw e;
-        }finally{
-            rwLock.writeLock().unlock();
-        }
+            throw new IllegalArgumentException();
+        }finally{rwLock.writeLock().unlock();}
     }
     public void setto        (byte[] bytes ){
         setto(new String(bytes,StandardCharsets.UTF_8));
